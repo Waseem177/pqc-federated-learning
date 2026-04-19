@@ -22,7 +22,7 @@ _num_nodes: int = 5
 _num_rounds: int = 10
 
 
-def print_header(num_nodes: int, num_rounds: int) -> None:
+def print_header(num_nodes: int, num_rounds: int, attack: bool = False) -> None:
     global _table, _num_nodes, _num_rounds
     _num_nodes = num_nodes
     _num_rounds = num_rounds
@@ -52,6 +52,21 @@ def print_header(num_nodes: int, num_rounds: int) -> None:
         padding=(0, 2),
         expand=True,
     ))
+
+    if attack:
+        attack_text = Text(justify="center")
+        attack_text.append("ATTACK MODE ENABLED", style="bold red")
+        attack_text.append("  ·  ", style="dim red")
+        attack_text.append(f"Node {num_nodes - 1}", style="bold red")
+        attack_text.append(" is a rogue node — poisoned gradients + forged ML-DSA-44 signature", style="red")
+        console.print(Panel(
+            attack_text,
+            title="[bold red]Rogue Node Simulation[/bold red]",
+            border_style="red",
+            padding=(0, 2),
+            expand=True,
+        ))
+
     console.print()
 
     _table = Table(
@@ -75,7 +90,7 @@ def print_header(num_nodes: int, num_rounds: int) -> None:
 
 
 def print_round_row(summary) -> None:
-    oh_kb = summary.total_overhead_bytes / summary.num_nodes / 1024
+    oh_kb = summary.total_overhead_bytes / summary.num_nodes / 1024 if summary.num_nodes else 0.0
     is_warmup = summary.round_num == 0
 
     round_label = Text(str(summary.round_num + 1), justify="right")
@@ -94,6 +109,18 @@ def print_round_row(summary) -> None:
         f"{oh_kb:.1f}",
         style=row_style,
     )
+
+    for nid in summary.rejected_nodes:
+        _table.add_row(
+            Text("  ↳", style="bold red"),
+            Text(f"Node {nid} REJECTED", style="bold red"),
+            Text("—", style="dim red"),
+            Text("—", style="dim red"),
+            Text("—", style="dim red"),
+            Text("FORGED SIG", style="bold red"),
+            style="on dark_red",
+        )
+
     sys.stdout.flush()
 
 

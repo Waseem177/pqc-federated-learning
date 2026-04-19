@@ -23,6 +23,7 @@ class RoundSummary:
     total_enc_ms: float      # sum of all node encryption times
     total_dec_ms: float      # sum of all server decryption/verify times
     total_overhead_bytes: int
+    rejected_nodes: list = field(default_factory=list)  # node IDs rejected this round
 
 
 class MetricsCollector:
@@ -37,6 +38,7 @@ class MetricsCollector:
             total_enc_ms=result.total_enc_ms,
             total_dec_ms=result.total_dec_ms,
             total_overhead_bytes=result.total_overhead_bytes,
+            rejected_nodes=list(result.rejected_nodes),
         )
         self._rounds.append(summary)
         return summary
@@ -67,7 +69,11 @@ class MetricsCollector:
     def export_csv(self, path: str) -> None:
         if not self._rounds:
             return
+        _csv_fields = [f for f in asdict(self._rounds[0]).keys() if f != "rejected_nodes"]
         with open(path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(asdict(self._rounds[0]).keys()))
+            writer = csv.DictWriter(f, fieldnames=_csv_fields)
             writer.writeheader()
-            writer.writerows(asdict(r) for r in self._rounds)
+            for r in self._rounds:
+                row = asdict(r)
+                row.pop("rejected_nodes", None)
+                writer.writerow(row)

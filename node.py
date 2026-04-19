@@ -1,6 +1,7 @@
 #!/home/wasee/pqc-env/bin/python
 """EdgeNode: generates fake gradients, encrypts and signs them for the aggregation server."""
 
+import os
 import sys
 
 _VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
@@ -58,3 +59,28 @@ class EdgeNode:
             self.node_id, payload, self._server_kem_pub, self._sig_keypair
         )
         return NodeUpdate(package=package, timing=timing)
+
+
+class RogueNode(EdgeNode):
+    """Compromised node: sends poisoned gradients with a forged (invalid) signature."""
+
+    def prepare_update(self) -> NodeUpdate:
+        # Poisoned gradient: large constant to corrupt the global model
+        poison = np.ones(GRADIENT_SHAPE, dtype=GRADIENT_DTYPE) * 100.0
+        payload = poison.tobytes()
+
+        # Encrypt legitimately so KEM decap + AES decrypt succeed on the server,
+        # then swap in random bytes as the signature — ML-DSA-44 verify will fail.
+        package, timing = encrypt_and_sign(
+            self.node_id, payload, self._server_kem_pub, self._sig_keypair
+        )
+        forged_sig = os.urandom(len(package.signature))
+        forged_package = EncryptedPackage(
+            node_id=package.node_id,
+            kem_ciphertext=package.kem_ciphertext,
+            aes_ciphertext=package.aes_ciphertext,
+            aes_nonce=package.aes_nonce,
+            signature=forged_sig,
+            payload_size=package.payload_size,
+        )
+        return NodeUpdate(package=forged_package, timing=timing)

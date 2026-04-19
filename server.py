@@ -34,6 +34,7 @@ class RoundResult:
     round_num: int
     global_model: np.ndarray
     node_metrics: list[NodeRoundMetrics]
+    rejected_nodes: list[int] = field(default_factory=list)
 
     @property
     def total_enc_ms(self) -> float:
@@ -122,4 +123,5 @@ class AggServer:
             round_num=round_num,
             global_model=self.global_model.copy(),
             node_metrics=metrics,
+            rejected_nodes=rejected,
         )
