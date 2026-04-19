@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(~/pqc-env/bin/python *)",
+      "Bash(~/pqc-env/bin/pip install *)",
+      "Bash(/home/wasee/pqc-env/bin/pip install *)",
+      "Bash(/home/wasee/pqc-env/bin/python *)"
+    ]
+  }
+}
