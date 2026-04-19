@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.pyo
+.claude/settings.local.json
+results.csv
