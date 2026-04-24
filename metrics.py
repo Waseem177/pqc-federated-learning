@@ -1,20 +1,12 @@
-#!/home/wasee/pqc-env/bin/python
+#!/usr/bin/env python3
 """Metrics collection, aggregation, and CSV export for the FL simulation."""
 
 import csv
-import sys
 from dataclasses import dataclass, field, asdict
-
-_VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
-if _VENV_SITE not in sys.path:
-    sys.path.insert(0, _VENV_SITE)
-
 from server import RoundResult
 
 RSA_BASELINE_MS = 71.0   # measured avg round latency with RSA (from prior benchmark)
 PQC_LABEL = "Kyber512 + ML-DSA-44"
-
-
 @dataclass
 class RoundSummary:
     round_num: int
@@ -24,8 +16,6 @@ class RoundSummary:
     total_dec_ms: float      # sum of all server decryption/verify times
     total_overhead_bytes: int
     rejected_nodes: list = field(default_factory=list)  # node IDs rejected this round
-
-
 class MetricsCollector:
     def __init__(self) -> None:
         self._rounds: list[RoundSummary] = []

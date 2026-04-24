@@ -1,11 +1,5 @@
-#!/home/wasee/pqc-env/bin/python
+#!/usr/bin/env python3
 """AggServer: verifies, decrypts, and FedAvg-aggregates node updates."""
-
-import sys
-
-_VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
-if _VENV_SITE not in sys.path:
-    sys.path.insert(0, _VENV_SITE)
 
 import numpy as np
 from dataclasses import dataclass, field
@@ -18,8 +12,6 @@ from pqc_layer import (
     decrypt_and_verify,
 )
 from node import NodeUpdate, GRADIENT_SHAPE, GRADIENT_DTYPE
-
-
 @dataclass
 class NodeRoundMetrics:
     node_id: int
@@ -27,8 +19,6 @@ class NodeRoundMetrics:
     dec_timing: TimingMs          # measured on the server
     payload_bytes: int
     overhead_bytes: int           # kem_ct + aes_ct + signature sizes
-
-
 @dataclass
 class RoundResult:
     round_num: int
@@ -60,8 +50,6 @@ class RoundResult:
     @property
     def total_overhead_bytes(self) -> int:
         return sum(m.overhead_bytes for m in self.node_metrics)
-
-
 class AggServer:
     def __init__(self) -> None:
         self._kem_keypair = KEMKeyPair()

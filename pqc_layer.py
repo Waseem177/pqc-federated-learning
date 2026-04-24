@@ -1,34 +1,21 @@
-#!/home/wasee/pqc-env/bin/python
+#!/usr/bin/env python3
 """PQC primitives: Kyber512 KEM + ML-DSA-44 signatures + AES-GCM payload encryption."""
 
 import os
-import sys
 import time
 from dataclasses import dataclass
-
-# Ensure the pqc-env site-packages are on the path when run outside the venv
-_VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
-if _VENV_SITE not in sys.path:
-    sys.path.insert(0, _VENV_SITE)
-
 import oqs
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 KEM_ALG = "Kyber512"
 SIG_ALG = "ML-DSA-44"
 AES_NONCE_BYTES = 12
-
-
 @dataclass
 class KEMPublicKey:
     raw: bytes
-
-
 @dataclass
 class SigPublicKey:
     raw: bytes
-
-
 @dataclass
 class EncryptedPackage:
     """Everything the server needs to decrypt and verify one node update."""
@@ -38,8 +25,6 @@ class EncryptedPackage:
     aes_nonce: bytes
     signature: bytes        # ML-DSA-44 signature over aes_ciphertext
     payload_size: int       # original plaintext bytes, for metrics
-
-
 @dataclass
 class TimingMs:
     sign_ms: float = 0.0
@@ -48,12 +33,8 @@ class TimingMs:
     kem_decap_ms: float = 0.0
     aes_dec_ms: float = 0.0
     sig_verify_ms: float = 0.0
-
-
 def _ms(start: float) -> float:
     return (time.perf_counter() - start) * 1000
-
-
 class KEMKeyPair:
     """Server-side Kyber512 KEM keypair. Generates once, used across all rounds."""
 
@@ -72,8 +53,6 @@ class KEMKeyPair:
         with oqs.KeyEncapsulation(KEM_ALG, secret_key=self._sec) as kem:
             secret = kem.decap_secret(ciphertext)
         return secret, _ms(t)
-
-
 class SigKeyPair:
     """Per-node ML-DSA-44 signing keypair."""
 
@@ -92,24 +71,18 @@ class SigKeyPair:
         with oqs.Signature(SIG_ALG, secret_key=self._sec) as sig:
             signature = sig.sign(message)
         return signature, _ms(t)
-
-
 def kem_encapsulate(server_pub: KEMPublicKey) -> tuple[bytes, bytes, float]:
     """Returns (kem_ciphertext, shared_secret, elapsed_ms)."""
     t = time.perf_counter()
     with oqs.KeyEncapsulation(KEM_ALG) as kem:
         ciphertext, shared_secret = kem.encap_secret(server_pub.raw)
     return ciphertext, shared_secret, _ms(t)
-
-
 def sig_verify(message: bytes, signature: bytes, pub: SigPublicKey) -> tuple[bool, float]:
     """Returns (valid, elapsed_ms)."""
     t = time.perf_counter()
     with oqs.Signature(SIG_ALG) as sig:
         valid = sig.verify(message, signature, pub.raw)
     return valid, _ms(t)
-
-
 def aes_encrypt(plaintext: bytes, shared_secret: bytes) -> tuple[bytes, bytes, float]:
     """AES-256-GCM encrypt. Returns (ciphertext_with_tag, nonce, elapsed_ms)."""
     key = shared_secret[:32]
@@ -117,16 +90,12 @@ def aes_encrypt(plaintext: bytes, shared_secret: bytes) -> tuple[bytes, bytes, f
     t = time.perf_counter()
     ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
     return ciphertext, nonce, _ms(t)
-
-
 def aes_decrypt(ciphertext: bytes, shared_secret: bytes, nonce: bytes) -> tuple[bytes, float]:
     """AES-256-GCM decrypt. Returns (plaintext, elapsed_ms). Raises on auth failure."""
     key = shared_secret[:32]
     t = time.perf_counter()
     plaintext = AESGCM(key).decrypt(nonce, ciphertext, None)
     return plaintext, _ms(t)
-
-
 def encrypt_and_sign(
     node_id: int,
     payload: bytes,
@@ -149,8 +118,6 @@ def encrypt_and_sign(
         payload_size=len(payload),
     )
     return pkg, timing
-
-
 def decrypt_and_verify(
     pkg: EncryptedPackage,
     server_kem_keypair: KEMKeyPair,
@@ -170,8 +137,6 @@ def decrypt_and_verify(
         raise ValueError(f"Signature verification failed for node {pkg.node_id}")
 
     return plaintext, timing
-
-
 if __name__ == "__main__":
     print("=== pqc_layer self-test ===")
 

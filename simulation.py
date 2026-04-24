@@ -1,22 +1,14 @@
-#!/home/wasee/pqc-env/bin/python
+#!/usr/bin/env python3
 """Entry point: orchestrates the PQC-secured federated learning simulation."""
 
-import sys
 import warnings
 warnings.filterwarnings("ignore")   # suppress liboqs version mismatch warning
-
-_VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
-if _VENV_SITE not in sys.path:
-    sys.path.insert(0, _VENV_SITE)
-
 import argparse
 
 from server import AggServer
 from node import EdgeNode, RogueNode
 from metrics import MetricsCollector
 from dashboard import print_header, print_round_row, print_final_summary
-
-
 def run_simulation(
     num_rounds: int = 10,
     num_nodes: int = 5,
@@ -48,8 +40,6 @@ def run_simulation(
     # ── Finish ────────────────────────────────────────────────────────────────
     collector.export_csv(csv_out)
     print_final_summary(collector)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PQC-Secured FL NIDS Simulator")
     parser.add_argument("--rounds", type=int, default=10,           help="Number of FL rounds (default 10)")

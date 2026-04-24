@@ -1,12 +1,7 @@
-#!/home/wasee/pqc-env/bin/python
+#!/usr/bin/env python3
 """Terminal dashboard: rich-based live per-round table + final PQC-vs-RSA summary."""
 
 import sys
-
-_VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
-if _VENV_SITE not in sys.path:
-    sys.path.insert(0, _VENV_SITE)
-
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -20,8 +15,6 @@ console = Console()
 _table: Table | None = None
 _num_nodes: int = 5
 _num_rounds: int = 10
-
-
 def print_header(num_nodes: int, num_rounds: int, attack: bool = False) -> None:
     global _table, _num_nodes, _num_rounds
     _num_nodes = num_nodes
@@ -87,8 +80,6 @@ def print_header(num_nodes: int, num_rounds: int, attack: bool = False) -> None:
     _table.add_column("Enc ms",     style="yellow",       justify="right",  min_width=9)
     _table.add_column("Dec ms",     style="yellow",       justify="right",  min_width=9)
     _table.add_column("OH KB/node", style="blue",         justify="right",  min_width=11)
-
-
 def print_round_row(summary) -> None:
     oh_kb = summary.total_overhead_bytes / summary.num_nodes / 1024 if summary.num_nodes else 0.0
     is_warmup = summary.round_num == 0
@@ -122,8 +113,6 @@ def print_round_row(summary) -> None:
         )
 
     sys.stdout.flush()
-
-
 def print_final_summary(collector) -> None:
     from metrics import RSA_BASELINE_MS, PQC_LABEL
 

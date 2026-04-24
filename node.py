@@ -1,13 +1,7 @@
-#!/home/wasee/pqc-env/bin/python
+#!/usr/bin/env python3
 """EdgeNode: generates fake gradients, encrypts and signs them for the aggregation server."""
 
 import os
-import sys
-
-_VENV_SITE = "/home/wasee/pqc-env/lib/python3.12/site-packages"
-if _VENV_SITE not in sys.path:
-    sys.path.insert(0, _VENV_SITE)
-
 import numpy as np
 from dataclasses import dataclass
 
@@ -23,14 +17,10 @@ from pqc_layer import (
 # 78 features (KDD99) → 64 → 32 → 5 classes  =  78*64 + 64*32 + 32*5 = 5152 + 2048 + 160 = 7360 params
 GRADIENT_SHAPE = (7360,)
 GRADIENT_DTYPE = np.float32
-
-
 @dataclass
 class NodeUpdate:
     package: EncryptedPackage
     timing: TimingMs
-
-
 class EdgeNode:
     def __init__(self, node_id: int, server_kem_pub: KEMPublicKey, seed: int | None = None) -> None:
         self.node_id = node_id
@@ -59,8 +49,6 @@ class EdgeNode:
             self.node_id, payload, self._server_kem_pub, self._sig_keypair
         )
         return NodeUpdate(package=package, timing=timing)
-
-
 class RogueNode(EdgeNode):
     """Compromised node: sends poisoned gradients with a forged (invalid) signature."""
 
