@@ -4,7 +4,6 @@ Federated learning simulation where five edge nodes train locally on network tra
 
 Built as a proof-of-concept for hardening FL pipelines against quantum adversaries before the threat becomes real.
 
----
 
 ## The Problem
 
@@ -15,7 +14,6 @@ RSA and ECDH break under Shor's algorithm on a sufficiently powerful quantum com
 
 This project swaps out classical crypto for the NIST-standardized PQC algorithms (ML-KEM, ML-DSA) that are designed to hold up against both. The overhead is negligible — around 100× faster than RSA in practice.
 
----
 
 ## How It Works
 
@@ -27,7 +25,6 @@ Each node runs local SGD on a small MLP (78→64→32→5, ~7360 params, KDD99 f
 4. The server **decapsulates** the KEM ciphertext, **decrypts** the payload, and **verifies** the signature — only then does it accept the update
 5. All verified updates are aggregated with FedAvg (uniform weights)
 
----
 
 ## PQC Stack
 
@@ -37,7 +34,6 @@ Each node runs local SGD on a small MLP (78→64→32→5, ~7360 params, KDD99 f
 | Signatures | ML-DSA-44 | NIST FIPS 204 | Node identity + update integrity |
 | Symmetric encryption | AES-256-GCM | NIST FIPS 197 | Payload encryption with KEM-derived key |
 
----
 
 ## Results
 
@@ -50,7 +46,6 @@ Each node runs local SGD on a small MLP (78→64→32→5, ~7360 params, KDD99 f
 
 Benchmarked on Python 3.12, Ubuntu 22.04 WSL2, liboqs 0.10.x. Round 0 includes key-gen warm-up; steady-state (rounds 1–9) averages ~0.57 ms/node.
 
----
 
 ## Setup
 
@@ -71,7 +66,6 @@ cd pqc-federated-learning
 
 If `liboqs-python` doesn't have a wheel for your platform, build from source: https://github.com/open-quantum-safe/liboqs-python
 
----
 
 ## Usage
 
@@ -96,7 +90,6 @@ If `liboqs-python` doesn't have a wheel for your platform, build from source: ht
 
 The simulation prints a per-round table to the terminal and exports a CSV with columns: `round_num, num_nodes, avg_pqc_ms, total_enc_ms, total_dec_ms, total_overhead_bytes`
 
----
 
 ## Project Structure
 
@@ -110,7 +103,6 @@ The simulation prints a per-round table to the terminal and exports a CSV with c
 └── results.csv     # Sample benchmark output (10 rounds, 5 nodes)
 ```
 
----
 
 ## What's Next
 
@@ -122,7 +114,6 @@ The simulation prints a per-round table to the terminal and exports a CSV with c
 - [ ] Differential privacy noise injection
 - [ ] Docker containerization for reproducible multi-node deployment
 
----
 
 ## References
 
@@ -131,6 +122,5 @@ The simulation prints a per-round table to the terminal and exports a CSV with c
 - [Open Quantum Safe / liboqs](https://openquantumsafe.org/)
 - McMahan et al., *Communication-Efficient Learning of Deep Networks from Decentralized Data* (FedAvg, 2017)
 
----
 
 MIT License
