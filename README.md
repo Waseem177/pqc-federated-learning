@@ -1,8 +1,18 @@
-# PQC-Secured Federated Learning NIDS
+# PQC-Secured Federated Learning Prototype
 
-Federated learning simulation where five edge nodes train locally on network traffic data and send encrypted, authenticated model updates to a central server — secured with post-quantum cryptography instead of classical RSA/ECDH.
+This project is a working prototype for securing federated learning model updates with post-quantum cryptography. The current implementation validates a secure client-to-server update pipeline in a simulated network intrusion detection setting, using Kyber-based key encapsulation, ML-DSA signatures, and AES-GCM payload encryption.
 
-Built as a proof-of-concept for hardening FL pipelines against quantum adversaries before the threat becomes real.
+Rather than claiming a full production federated learning system, this repository focuses on the security layer: how model updates can be confidentially transmitted, authenticated, and verified before aggregation in a quantum-resilient setting.
+
+
+## Current Scope
+
+- simulated edge nodes that generate local model updates
+- post-quantum protected update transmission using Kyber512 and ML-DSA-44
+- AES-GCM encryption for payload confidentiality
+- server-side decryption, signature verification, and FedAvg-style aggregation
+- latency and communication-overhead measurement
+- a rogue-node scenario with forged signature rejection
 
 
 ## The Problem
@@ -45,6 +55,16 @@ Each node runs local SGD on a small MLP (78→64→32→5, ~7360 params, KDD99 f
 | Signature failures across 10 rounds | 0 / 50 | — | — |
 
 Benchmarked on Python 3.12, Ubuntu 22.04 WSL2, liboqs 0.10.x. Round 0 includes key-gen warm-up; steady-state (rounds 1–9) averages ~0.57 ms/node.
+
+
+## Current Limitations
+
+This is still a prototype and not yet a full federated learning benchmark system. In particular:
+
+- local training is simulated using generated gradients rather than real dataset-based client training
+- the current setting is NIDS-oriented, not healthcare-oriented
+- the RSA baseline is not yet implemented as a reproducible in-repo benchmark
+- the project is not yet containerized or deployed across isolated clients
 
 
 ## Setup
@@ -104,16 +124,14 @@ The simulation prints a per-round table to the terminal and exports a CSV with c
 ```
 
 
-## Status
+## Planned Next Steps
 
-This project is complete as a simulation. All core goals are done:
+The next planned upgrade is to adapt this prototype into a healthcare-focused federated learning setting by:
 
-- [x] Kyber512 KEM + ML-DSA-44 sign/verify
-- [x] AES-256-GCM payload encryption
-- [x] 5-node FL simulation with FedAvg
-- [x] Per-round latency metrics + CSV export
-- [x] Rogue node / model poisoning attack simulation
-
+- replacing simulated updates with real client-side training
+- using the PIMA diabetes dataset for initial healthcare experiments
+- adding a reproducible classical cryptography baseline
+- benchmarking both security overhead and model utility
 
 
 ## References
