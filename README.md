@@ -104,15 +104,17 @@ The simulation prints a per-round table to the terminal and exports a CSV with c
 ```
 
 
-## What's Next
+## Status
+
+This project is complete as a simulation. All core goals are done:
 
 - [x] Kyber512 KEM + ML-DSA-44 sign/verify
 - [x] AES-256-GCM payload encryption
 - [x] 5-node FL simulation with FedAvg
 - [x] Per-round latency metrics + CSV export
-- [ ] Real dataset integration (KDD99 / CICIDS2017)
-- [ ] Differential privacy noise injection
-- [ ] Docker containerization for reproducible multi-node deployment
+- [x] Rogue node / model poisoning attack simulation
+
+The next phase applies PQC-secured federated learning to a healthcare setting — a separate project.
 
 
 ## References
