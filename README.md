@@ -114,7 +114,6 @@ This project is complete as a simulation. All core goals are done:
 - [x] Per-round latency metrics + CSV export
 - [x] Rogue node / model poisoning attack simulation
 
-The next phase applies PQC-secured federated learning to a healthcare setting — a separate project.
 
 
 ## References
