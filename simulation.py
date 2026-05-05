@@ -22,6 +22,7 @@ def parse_args():
     p.add_argument("--nodes",   type=int,   default=5)
     p.add_argument("--mode",    choices=["pqc", "classical", "both"], default="pqc")
     p.add_argument("--lr",      type=float, default=1e-3)
+    p.add_argument("--seed",    type=int,   default=42)
     return p.parse_args()
 
 
@@ -33,8 +34,11 @@ def _bar(title, width=64):
     print(f"{'═'*width}")
 
 
-def run_one(mode, shards, n_rounds, lr):
+def run_one(mode, shards, n_rounds, lr, seed=42):
     n_nodes = len(shards)
+
+    # seed numpy global RNG so training shuffles are reproducible per seed
+    np.random.seed(seed)
 
     # global test set = union of all hospital test sets
     X_te_global = np.concatenate([s[2] for s in shards])
@@ -42,10 +46,10 @@ def run_one(mode, shards, n_rounds, lr):
 
     print(f"\n[{mode.upper()}] Initialising server...")
     srv = AggregationServer(mode=mode)
-    ref_model = FeedForwardNN(input_dim=shards[0][0].shape[1], seed=0)
+    ref_model = FeedForwardNN(input_dim=shards[0][0].shape[1], seed=seed)
     srv.init_weights(ref_model.get_weights())
 
-    print(f"[{mode.upper()}] Creating {n_nodes} nodes  (lr={lr})...")
+    print(f"[{mode.upper()}] Creating {n_nodes} nodes  (lr={lr}, seed={seed})...")
     nodes = []
     for i, (X_tr, y_tr, X_te, y_te) in enumerate(shards):
         nd = FederatedNode(
@@ -57,6 +61,7 @@ def run_one(mode, shards, n_rounds, lr):
             hmac_key=srv.hmac_key,
             lr=lr,
             mode=mode,
+            model_seed=i * 1000 + seed,
         )
         srv.register_node(i, len(X_tr))
         nodes.append(nd)
@@ -189,7 +194,7 @@ def main():
 
     all_results = {}
     for mode in modes:
-        round_log = run_one(mode, shards, n_rounds, lr)
+        round_log = run_one(mode, shards, n_rounds, lr, seed=args.seed)
         all_results[mode] = round_log
 
     summaries = [summarise(m, all_results[m]) for m in modes]
@@ -213,11 +218,11 @@ def main():
         print_comparison_table(summaries)
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = f"results_{args.mode}_{n_rounds}r_{n_nodes}n_{ts}.json"
+    out_path = f"results_{args.mode}_{n_rounds}r_{n_nodes}n_seed{args.seed}_{ts}.json"
     with open(out_path, "w") as f:
         json.dump(dict(
             timestamp=ts, mode=args.mode,
-            rounds=n_rounds, nodes=n_nodes, lr=lr,
+            rounds=n_rounds, nodes=n_nodes, lr=lr, seed=args.seed,
             summaries=summaries,
             rounds_detail={m: all_results[m] for m in modes},
         ), f, indent=2)

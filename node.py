@@ -69,13 +69,15 @@ def bytes_to_weights(b): return pickle.loads(b)
 class FederatedNode:
     def __init__(self, node_id, X_train, y_train, X_test, y_test,
                  server_kem_pub, server_rsa_pub=None, hmac_key=b"",
-                 local_epochs=5, batch_size=32, lr=1e-3, mode="pqc"):
+                 local_epochs=5, batch_size=32, lr=1e-3, mode="pqc",
+                 model_seed=None):
         self.node_id=node_id; self.X_train=X_train; self.y_train=y_train
         self.X_test=X_test; self.y_test=y_test
         self.server_kem_pub=server_kem_pub; self.server_rsa_pub=server_rsa_pub
         self.hmac_key=hmac_key; self.local_epochs=local_epochs
         self.batch_size=batch_size; self.lr=lr; self.mode=mode
-        self.model=FeedForwardNN(input_dim=X_train.shape[1], seed=node_id*42)
+        _seed = model_seed if model_seed is not None else node_id*42
+        self.model=FeedForwardNN(input_dim=X_train.shape[1], seed=_seed)
         self.sig_kp=SigKeyPair()
 
     def set_global_weights(self, w): self.model.set_weights(w)
