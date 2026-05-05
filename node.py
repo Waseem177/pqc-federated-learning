@@ -46,9 +46,11 @@ class FeedForwardNN:
         eps = 1e-8
         loss = -np.mean(y*np.log(p+eps)+(1-y)*np.log(1-p+eps))
         tp=((pred==1)&(yi==1)).sum(); fp=((pred==1)&(yi==0)).sum()
-        fn=((pred==0)&(yi==1)).sum()
+        fn=((pred==0)&(yi==1)).sum(); tn=((pred==0)&(yi==0)).sum()
         prec=tp/max(tp+fp,1); rec=tp/max(tp+fn,1)
         f1=2*prec*rec/max(prec+rec,1e-8)
+        sensitivity=float(tp/max(tp+fn,1))   # TPR / recall
+        specificity=float(tn/max(tn+fp,1))   # TNR
         th=np.linspace(0,1,100); tprs=[]; fprs=[]
         for t in th:
             pb=(p>=t).astype(int)
@@ -56,7 +58,8 @@ class FeedForwardNN:
             fpr_v=((pb==1)&(yi==0)).sum()/max(((yi==0)).sum(),1)
             tprs.append(tpr_v); fprs.append(fpr_v)
         auc=abs(np.trapezoid(tprs,fprs))
-        return {"loss":float(loss),"accuracy":float(acc),"f1":float(f1),"auc":float(auc)}
+        return {"loss":float(loss),"accuracy":float(acc),"f1":float(f1),
+                "auc":float(auc),"sensitivity":sensitivity,"specificity":specificity}
 
 def weights_to_bytes(w):
     buf=io.BytesIO(); pickle.dump([x.astype(np.float32) for x in w],buf); return buf.getvalue()
