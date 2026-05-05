@@ -1,30 +1,41 @@
-#!/usr/bin/env python3
-"""PQC primitives: Kyber512 KEM + ML-DSA-44 signatures + AES-GCM payload encryption."""
-
-import os
-import time
+import os, sys, time
 from dataclasses import dataclass
 import oqs
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-KEM_ALG = "Kyber512"
-SIG_ALG = "ML-DSA-44"
-AES_NONCE_BYTES = 12
+KEM_ALG = "ML-KEM-768"
+SIG_ALG = "ML-DSA-65"
+AES_NONCE_LEN = 12
+AES_KEY_LEN = 32
+HKDF_INFO = b"pq-fedhealth-v1"
+
+def _ms(t0): return (time.perf_counter() - t0) * 1000.0
+
+def _hkdf(ss):
+    return HKDF(algorithm=hashes.SHA256(), length=AES_KEY_LEN, salt=None, info=HKDF_INFO).derive(ss)
+
 @dataclass
 class KEMPublicKey:
     raw: bytes
-@dataclass
-class SigPublicKey:
-    raw: bytes
+
 @dataclass
 class EncryptedPackage:
-    """Everything the server needs to decrypt and verify one node update."""
     node_id: int
-    kem_ciphertext: bytes   # Kyber512 encapsulation ciphertext
-    aes_ciphertext: bytes   # AES-GCM ciphertext+tag
+    kem_ciphertext: bytes
+    aes_ciphertext: bytes
     aes_nonce: bytes
-    signature: bytes        # ML-DSA-44 signature over aes_ciphertext
-    payload_size: int       # original plaintext bytes, for metrics
+    signature: bytes
+    sig_public_key: bytes
+    payload_size: int
+
+    def total_bytes(self):
+        return len(self.kem_ciphertext)+len(self.aes_ciphertext)+len(self.aes_nonce)+len(self.signature)+len(self.sig_public_key)
+
+    def overhead_bytes(self):
+        return self.total_bytes() - self.payload_size
+
 @dataclass
 class TimingMs:
     sign_ms: float = 0.0
@@ -33,132 +44,96 @@ class TimingMs:
     kem_decap_ms: float = 0.0
     aes_dec_ms: float = 0.0
     sig_verify_ms: float = 0.0
-def _ms(start: float) -> float:
-    return (time.perf_counter() - start) * 1000
-class KEMKeyPair:
-    """Server-side Kyber512 KEM keypair. Generates once, used across all rounds."""
 
-    def __init__(self) -> None:
+    def total_enc_ms(self): return self.sign_ms + self.kem_encap_ms + self.aes_enc_ms
+    def total_dec_ms(self): return self.kem_decap_ms + self.aes_dec_ms + self.sig_verify_ms
+
+class KEMKeyPair:
+    def __init__(self):
         with oqs.KeyEncapsulation(KEM_ALG) as kem:
             self._pub = kem.generate_keypair()
             self._sec = kem.export_secret_key()
 
     @property
-    def public_key(self) -> KEMPublicKey:
-        return KEMPublicKey(self._pub)
+    def public_key(self): return KEMPublicKey(self._pub)
 
-    def decapsulate(self, ciphertext: bytes) -> tuple[bytes, float]:
-        """Returns (shared_secret, elapsed_ms)."""
+    def decapsulate(self, ct):
         t = time.perf_counter()
         with oqs.KeyEncapsulation(KEM_ALG, secret_key=self._sec) as kem:
-            secret = kem.decap_secret(ciphertext)
-        return secret, _ms(t)
-class SigKeyPair:
-    """Per-node ML-DSA-44 signing keypair."""
+            ss = kem.decap_secret(ct)
+        return ss, _ms(t)
 
-    def __init__(self) -> None:
+class SigKeyPair:
+    def __init__(self):
         with oqs.Signature(SIG_ALG) as sig:
             self._pub = sig.generate_keypair()
             self._sec = sig.export_secret_key()
 
     @property
-    def public_key(self) -> SigPublicKey:
-        return SigPublicKey(self._pub)
+    def public_key_bytes(self): return self._pub
 
-    def sign(self, message: bytes) -> tuple[bytes, float]:
-        """Returns (signature, elapsed_ms)."""
+    def sign(self, msg):
         t = time.perf_counter()
         with oqs.Signature(SIG_ALG, secret_key=self._sec) as sig:
-            signature = sig.sign(message)
-        return signature, _ms(t)
-def kem_encapsulate(server_pub: KEMPublicKey) -> tuple[bytes, bytes, float]:
-    """Returns (kem_ciphertext, shared_secret, elapsed_ms)."""
+            s = sig.sign(msg)
+        return s, _ms(t)
+
+def kem_encapsulate(server_pub):
     t = time.perf_counter()
     with oqs.KeyEncapsulation(KEM_ALG) as kem:
-        ciphertext, shared_secret = kem.encap_secret(server_pub.raw)
-    return ciphertext, shared_secret, _ms(t)
-def sig_verify(message: bytes, signature: bytes, pub: SigPublicKey) -> tuple[bool, float]:
-    """Returns (valid, elapsed_ms)."""
+        ct, ss = kem.encap_secret(server_pub.raw)
+    return ct, ss, _ms(t)
+
+def sig_verify(msg, signature, pub):
     t = time.perf_counter()
     with oqs.Signature(SIG_ALG) as sig:
-        valid = sig.verify(message, signature, pub.raw)
+        valid = sig.verify(msg, signature, pub)
     return valid, _ms(t)
-def aes_encrypt(plaintext: bytes, shared_secret: bytes) -> tuple[bytes, bytes, float]:
-    """AES-256-GCM encrypt. Returns (ciphertext_with_tag, nonce, elapsed_ms)."""
-    key = shared_secret[:32]
-    nonce = os.urandom(AES_NONCE_BYTES)
+
+def aes_encrypt(pt, ss):
+    key = _hkdf(ss)
+    nonce = os.urandom(AES_NONCE_LEN)
     t = time.perf_counter()
-    ciphertext = AESGCM(key).encrypt(nonce, plaintext, None)
-    return ciphertext, nonce, _ms(t)
-def aes_decrypt(ciphertext: bytes, shared_secret: bytes, nonce: bytes) -> tuple[bytes, float]:
-    """AES-256-GCM decrypt. Returns (plaintext, elapsed_ms). Raises on auth failure."""
-    key = shared_secret[:32]
+    ct = AESGCM(key).encrypt(nonce, pt, None)
+    return ct, nonce, _ms(t)
+
+def aes_decrypt(ct, ss, nonce):
+    key = _hkdf(ss)
     t = time.perf_counter()
-    plaintext = AESGCM(key).decrypt(nonce, ciphertext, None)
-    return plaintext, _ms(t)
-def encrypt_and_sign(
-    node_id: int,
-    payload: bytes,
-    server_kem_pub: KEMPublicKey,
-    node_sig_keypair: SigKeyPair,
-) -> tuple[EncryptedPackage, TimingMs]:
-    """Full node-side PQC pipeline: sign → KEM encap → AES-GCM encrypt."""
-    timing = TimingMs()
+    pt = AESGCM(key).decrypt(nonce, ct, None)
+    return pt, _ms(t)
 
-    signature, timing.sign_ms = node_sig_keypair.sign(payload)
-    kem_ct, shared_secret, timing.kem_encap_ms = kem_encapsulate(server_kem_pub)
-    aes_ct, nonce, timing.aes_enc_ms = aes_encrypt(payload, shared_secret)
+def encrypt_and_sign(node_id, payload, server_kem_pub, node_sig_kp):
+    t = TimingMs()
+    kem_ct, ss, t.kem_encap_ms = kem_encapsulate(server_kem_pub)
+    aes_ct, nonce, t.aes_enc_ms = aes_encrypt(payload, ss)
+    sig, t.sign_ms = node_sig_kp.sign(kem_ct + aes_ct)
+    pkg = EncryptedPackage(node_id, kem_ct, aes_ct, nonce, sig, node_sig_kp.public_key_bytes, len(payload))
+    return pkg, t
 
-    pkg = EncryptedPackage(
-        node_id=node_id,
-        kem_ciphertext=kem_ct,
-        aes_ciphertext=aes_ct,
-        aes_nonce=nonce,
-        signature=signature,
-        payload_size=len(payload),
-    )
-    return pkg, timing
-def decrypt_and_verify(
-    pkg: EncryptedPackage,
-    server_kem_keypair: KEMKeyPair,
-    node_sig_pub: SigPublicKey,
-) -> tuple[bytes, TimingMs]:
-    """Full server-side PQC pipeline: KEM decap → AES-GCM decrypt → verify.
-
-    Raises ValueError if signature check fails.
-    """
-    timing = TimingMs()
-
-    shared_secret, timing.kem_decap_ms = server_kem_keypair.decapsulate(pkg.kem_ciphertext)
-    plaintext, timing.aes_dec_ms = aes_decrypt(pkg.aes_ciphertext, shared_secret, pkg.aes_nonce)
-    valid, timing.sig_verify_ms = sig_verify(plaintext, pkg.signature, node_sig_pub)
-
+def decrypt_and_verify(pkg, server_kem_kp):
+    t = TimingMs()
+    ss, t.kem_decap_ms = server_kem_kp.decapsulate(pkg.kem_ciphertext)
+    pt, t.aes_dec_ms = aes_decrypt(pkg.aes_ciphertext, ss, pkg.aes_nonce)
+    valid, t.sig_verify_ms = sig_verify(pkg.kem_ciphertext + pkg.aes_ciphertext, pkg.signature, pkg.sig_public_key)
     if not valid:
-        raise ValueError(f"Signature verification failed for node {pkg.node_id}")
+        raise ValueError(f"Signature FAILED for node {pkg.node_id}")
+    return pt, t
 
-    return plaintext, timing
 if __name__ == "__main__":
-    print("=== pqc_layer self-test ===")
-
+    print("=== PQ-FedHealth PQC Layer ===")
+    print(f"KEM: {KEM_ALG}  SIG: {SIG_ALG}")
     server_kem = KEMKeyPair()
     node_sig = SigKeyPair()
-    payload = b"gradient-data-test-" * 50
-
-    pkg, enc_timing = encrypt_and_sign(0, payload, server_kem.public_key, node_sig)
-    recovered, dec_timing = decrypt_and_verify(pkg, server_kem, node_sig.public_key)
-
-    assert recovered == payload, "Payload mismatch!"
-    print(f"  sign:       {enc_timing.sign_ms:.3f} ms")
-    print(f"  kem_encap:  {enc_timing.kem_encap_ms:.3f} ms")
-    print(f"  aes_enc:    {enc_timing.aes_enc_ms:.3f} ms")
-    print(f"  kem_decap:  {dec_timing.kem_decap_ms:.3f} ms")
-    print(f"  aes_dec:    {dec_timing.aes_dec_ms:.3f} ms")
-    print(f"  sig_verify: {dec_timing.sig_verify_ms:.3f} ms")
-    total = sum([
-        enc_timing.sign_ms, enc_timing.kem_encap_ms, enc_timing.aes_enc_ms,
-        dec_timing.kem_decap_ms, dec_timing.aes_dec_ms, dec_timing.sig_verify_ms,
-    ])
-    print(f"  total:      {total:.3f} ms")
-    overhead = len(pkg.kem_ciphertext) + len(pkg.aes_ciphertext) + len(pkg.signature)
-    print(f"  overhead:   {overhead} bytes  (payload: {len(payload)} bytes)")
+    payload = os.urandom(4096)
+    pkg, enc_t = encrypt_and_sign(0, payload, server_kem.public_key, node_sig)
+    recovered, dec_t = decrypt_and_verify(pkg, server_kem)
+    assert recovered == payload
+    print(f"  KEM encap   : {enc_t.kem_encap_ms:.3f} ms")
+    print(f"  AES enc     : {enc_t.aes_enc_ms:.3f} ms")
+    print(f"  Sign        : {enc_t.sign_ms:.3f} ms")
+    print(f"  KEM decap   : {dec_t.kem_decap_ms:.3f} ms")
+    print(f"  AES dec     : {dec_t.aes_dec_ms:.3f} ms")
+    print(f"  Verify      : {dec_t.sig_verify_ms:.3f} ms")
+    print(f"  Bundle size : {pkg.total_bytes()/1024:.2f} KB  (overhead: {pkg.overhead_bytes()} B)")
     print("PASS")
