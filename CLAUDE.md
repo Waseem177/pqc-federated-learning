@@ -1,7 +1,7 @@
-# Project: PQC-Secured Federated Learning NIDS
+# Project: PQC-Secured Federated Learning (Healthcare)
 
 ## What this is
-5 simulated edge nodes train locally on network intrusion data.
+5 simulated hospital nodes train locally on medical data.
 Model updates are secured with CRYSTALS-Kyber (confidentiality) 
 and ML-DSA/Dilithium (authentication) before aggregation.
 
