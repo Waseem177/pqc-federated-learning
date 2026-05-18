@@ -1,0 +1,199 @@
+{
+  "timestamp": "2026-05-18T06:35:41.101262",
+  "iterations": 20,
+  "payload_bytes": 12288,
+  "levels": [
+    {
+      "label": "Level 1",
+      "nist_level": 1,
+      "kem": "ML-KEM-512",
+      "sig": "ML-DSA-44",
+      "result": {
+        "timings": {
+          "keygen_kem_ms": {
+            "mean_ms": 0.4311546997996629,
+            "std_ms": 1.6502924874056755
+          },
+          "keygen_sig_ms": {
+            "mean_ms": 0.12537255061033648,
+            "std_ms": 0.21142749601708286
+          },
+          "encap_ms": {
+            "mean_ms": 0.04815619977307506,
+            "std_ms": 0.039412758737227896
+          },
+          "aes_enc_ms": {
+            "mean_ms": 0.42384855023556156,
+            "std_ms": 1.703307283094819
+          },
+          "sign_ms": {
+            "mean_ms": 0.2456958496622974,
+            "std_ms": 0.1116450298143672
+          },
+          "decap_ms": {
+            "mean_ms": 0.05607189996226225,
+            "std_ms": 0.028625493424160774
+          },
+          "aes_dec_ms": {
+            "mean_ms": 0.03614684974309057,
+            "std_ms": 0.016878046838949192
+          },
+          "verify_ms": {
+            "mean_ms": 0.12979085004189983,
+            "std_ms": 0.026889556312084086
+          },
+          "total_enc_ms": {
+            "mean_ms": 0.717700599670934,
+            "std_ms": 1.8242305206326381
+          },
+          "total_dec_ms": {
+            "mean_ms": 0.22200959974725265,
+            "std_ms": 0.0644895478056387
+          },
+          "round_trip_ms": {
+            "mean_ms": 0.9397101994181867,
+            "std_ms": 1.8691784682202257
+          }
+        },
+        "sizes": {
+          "kem_ct_bytes": 768,
+          "aes_ct_bytes": 12304,
+          "signature_bytes": 2420,
+          "sig_pubkey_bytes": 1312,
+          "nonce_bytes": 12,
+          "payload_bytes": 12288,
+          "total_bundle_bytes": 16816,
+          "crypto_overhead_bytes": 4512
+        }
+      }
+    },
+    {
+      "label": "Level 3",
+      "nist_level": 3,
+      "kem": "ML-KEM-768",
+      "sig": "ML-DSA-65",
+      "result": {
+        "timings": {
+          "keygen_kem_ms": {
+            "mean_ms": 0.07234425029309932,
+            "std_ms": 0.0373538822234988
+          },
+          "keygen_sig_ms": {
+            "mean_ms": 0.17106830000557238,
+            "std_ms": 0.19210124032811013
+          },
+          "encap_ms": {
+            "mean_ms": 0.06795400022383546,
+            "std_ms": 0.04402597942067044
+          },
+          "aes_enc_ms": {
+            "mean_ms": 0.05078174999653129,
+            "std_ms": 0.03609122689067067
+          },
+          "sign_ms": {
+            "mean_ms": 0.2886133999709273,
+            "std_ms": 0.12687072286962525
+          },
+          "decap_ms": {
+            "mean_ms": 0.07049065025057644,
+            "std_ms": 0.035546510062607
+          },
+          "aes_dec_ms": {
+            "mean_ms": 0.050003249816654716,
+            "std_ms": 0.047302024107345526
+          },
+          "verify_ms": {
+            "mean_ms": 0.18486060071154498,
+            "std_ms": 0.06946061413040303
+          },
+          "total_enc_ms": {
+            "mean_ms": 0.40734915019129403,
+            "std_ms": 0.1865304489066722
+          },
+          "total_dec_ms": {
+            "mean_ms": 0.30535450077877613,
+            "std_ms": 0.13453847861626897
+          },
+          "round_trip_ms": {
+            "mean_ms": 0.7127036509700702,
+            "std_ms": 0.30191700578163083
+          }
+        },
+        "sizes": {
+          "kem_ct_bytes": 1088,
+          "aes_ct_bytes": 12304,
+          "signature_bytes": 3309,
+          "sig_pubkey_bytes": 1952,
+          "nonce_bytes": 12,
+          "payload_bytes": 12288,
+          "total_bundle_bytes": 18665,
+          "crypto_overhead_bytes": 6361
+        }
+      }
+    },
+    {
+      "label": "Level 5",
+      "nist_level": 5,
+      "kem": "ML-KEM-1024",
+      "sig": "ML-DSA-87",
+      "result": {
+        "timings": {
+          "keygen_kem_ms": {
+            "mean_ms": 0.08261149996542372,
+            "std_ms": 0.04037063641199879
+          },
+          "keygen_sig_ms": {
+            "mean_ms": 0.24594049918960081,
+            "std_ms": 0.37970502895956615
+          },
+          "encap_ms": {
+            "mean_ms": 0.06149265045678476,
+            "std_ms": 0.01596580983361107
+          },
+          "aes_enc_ms": {
+            "mean_ms": 0.04056174984725658,
+            "std_ms": 0.012900435168529123
+          },
+          "sign_ms": {
+            "mean_ms": 0.35116585040668724,
+            "std_ms": 0.11736057494190244
+          },
+          "decap_ms": {
+            "mean_ms": 0.06501740026578773,
+            "std_ms": 0.012592763628634122
+          },
+          "aes_dec_ms": {
+            "mean_ms": 0.03454140041867504,
+            "std_ms": 0.01363839411402382
+          },
+          "verify_ms": {
+            "mean_ms": 0.21432494995679008,
+            "std_ms": 0.03841604723199129
+          },
+          "total_enc_ms": {
+            "mean_ms": 0.4532202507107286,
+            "std_ms": 0.13007959183678722
+          },
+          "total_dec_ms": {
+            "mean_ms": 0.31388375064125285,
+            "std_ms": 0.04911489996960342
+          },
+          "round_trip_ms": {
+            "mean_ms": 0.7671040013519814,
+            "std_ms": 0.16093482286537208
+          }
+        },
+        "sizes": {
+          "kem_ct_bytes": 1568,
+          "aes_ct_bytes": 12304,
+          "signature_bytes": 4627,
+          "sig_pubkey_bytes": 2592,
+          "nonce_bytes": 12,
+          "payload_bytes": 12288,
+          "total_bundle_bytes": 21103,
+          "crypto_overhead_bytes": 8799
+        }
+      }
+    }
+  ]
+}
