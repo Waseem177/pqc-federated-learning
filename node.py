@@ -66,16 +66,26 @@ def weights_to_bytes(w):
 
 def bytes_to_weights(b): return pickle.loads(b)
 
+DP_DELTA = 1e-5   # (ε, δ)-DP; δ fixed, ε is the privacy budget supplied by caller
+DP_CLIP  = 0.10   # L2 sensitivity — clips deltas whose norm exceeds this value
+
+def _dp_noise_sigma(epsilon):
+    """Gaussian mechanism: σ = S * sqrt(2*ln(1.25/δ)) / ε"""
+    import math
+    return DP_CLIP * math.sqrt(2 * math.log(1.25 / DP_DELTA)) / epsilon
+
+
 class FederatedNode:
     def __init__(self, node_id, X_train, y_train, X_test, y_test,
                  server_kem_pub, server_rsa_pub=None, hmac_key=b"",
                  local_epochs=5, batch_size=32, lr=1e-3, mode="pqc",
-                 model_seed=None):
+                 model_seed=None, epsilon=None):
         self.node_id=node_id; self.X_train=X_train; self.y_train=y_train
         self.X_test=X_test; self.y_test=y_test
         self.server_kem_pub=server_kem_pub; self.server_rsa_pub=server_rsa_pub
         self.hmac_key=hmac_key; self.local_epochs=local_epochs
         self.batch_size=batch_size; self.lr=lr; self.mode=mode
+        self.epsilon=epsilon   # None = no DP
         _seed = model_seed if model_seed is not None else node_id*42
         self.model=FeedForwardNN(input_dim=X_train.shape[1], seed=_seed)
         self.sig_kp=SigKeyPair()
@@ -91,11 +101,22 @@ class FederatedNode:
                 self.model.forward(X[b]); self.model.backward(y[b],lr=self.lr)
         return self.model.get_weights()
 
+    def _apply_dp(self, delta):
+        """Clip delta to DP_CLIP, then add calibrated Gaussian noise."""
+        flat = np.concatenate([l.ravel() for l in delta])
+        l2 = float(np.linalg.norm(flat))
+        scale = min(1.0, DP_CLIP / (l2 + 1e-12))
+        clipped = [l * scale for l in delta]
+        sigma = _dp_noise_sigma(self.epsilon)
+        return [l + np.random.normal(0, sigma, l.shape).astype(np.float32) for l in clipped]
+
     def prepare_update(self, global_weights):
         pre=[w.copy() for w in global_weights]
         self.set_global_weights(pre)
         new=self.train_local()
         delta=[n-p for n,p in zip(new,pre)]
+        if self.epsilon is not None:
+            delta = self._apply_dp(delta)
         delta_bytes=weights_to_bytes(delta)
         metrics=self.model.evaluate(self.X_test,self.y_test)
         if self.mode=="pqc":

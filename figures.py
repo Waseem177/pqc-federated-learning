@@ -3,10 +3,11 @@
 Generate all paper figures for PQC-FL Healthcare project.
 
 Figures produced:
-  fig1_convergence.png      — FL convergence curve (AUC ± std, 5 seeds, 50 rounds)
-  fig2_security_levels.png  — Security level vs latency and overhead (NIST L1/L3/L5)
-  fig3_byzantine.png        — Byzantine defense: clean vs undefended vs defended
+  fig1_convergence.png       — FL convergence curve (AUC ± std, 5 seeds, 50 rounds)
+  fig2_security_levels.png   — Security level vs latency and overhead (NIST L1/L3/L5)
+  fig3_byzantine.png         — Byzantine defense: clean vs undefended vs defended
   fig4_latency_breakdown.png — PQC vs Classical per-round latency breakdown
+  fig5_dp_tradeoff.png       — Differential privacy epsilon vs AUC tradeoff
 
 Usage:
   python figures.py
@@ -321,6 +322,80 @@ def fig4_latency_breakdown():
     print("Saved fig4_latency_breakdown.png")
 
 
+# ── Figure 5: Differential Privacy Tradeoff ───────────────────────────────────
+
+def fig5_dp_tradeoff():
+    candidates = sorted(glob.glob("results_dp_sweep_*.json"))
+    if not candidates:
+        print("No DP sweep results found — skipping fig5")
+        return
+    path = candidates[-1]
+    print(f"  Using DP file: {os.path.basename(path)}")
+
+    d = json.load(open(path))
+    results = d["results"]
+
+    # Parse epsilon labels (inf → ∞)
+    eps_labels = []
+    eps_vals   = []   # float for sorting; inf for no-DP
+    for r in results:
+        e = r["epsilon"]
+        eps_labels.append("∞" if e == "inf" else e)
+        eps_vals.append(float("inf") if e == "inf" else float(e))
+
+    final_aucs = [r["final_auc"] for r in results]
+    n_rounds   = d["rounds"]
+
+    # Colour map: one colour per epsilon
+    colors = [RED, ORANGE, "#F4D03F", GREEN, BLUE, "#7D3C98"]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+    # ── Left: convergence curves per epsilon ────────────────────────
+    for i, r in enumerate(results):
+        rds  = [x["round"] for x in r["rounds"]]
+        aucs = [x["auc"]   for x in r["rounds"]]
+        lbl  = f"ε = {eps_labels[i]}"
+        lw   = 2.5 if r["epsilon"] == "inf" else 1.8
+        ls   = "--" if r["epsilon"] == "inf" else "-"
+        ax1.plot(rds, aucs, color=colors[i], lw=lw, ls=ls, label=lbl)
+
+    ax1.set_xlabel("Communication Round")
+    ax1.set_ylabel("Global AUC")
+    ax1.set_title(f"Convergence Under Differential Privacy\n"
+                  f"(clip={d['dp_clip']}, δ={d['dp_delta']}, {n_rounds} rounds)")
+    ax1.set_xlim(1, n_rounds)
+    ax1.set_ylim(0.0, 1.0)
+    ax1.legend(loc="upper left", fontsize=9)
+    ax1.grid(True, alpha=0.3)
+
+    # ── Right: final AUC vs epsilon bar chart ───────────────────────
+    x = np.arange(len(eps_labels))
+    bars = ax2.bar(x, final_aucs, color=colors, width=0.6, edgecolor="white", lw=0.8)
+
+    baseline_auc = results[-1]["final_auc"]   # ε=∞
+    ax2.axhline(baseline_auc, color="black", lw=1.2, ls="--", alpha=0.6,
+                label=f"No-DP baseline ({baseline_auc:.3f})")
+
+    for bar, auc, lbl in zip(bars, final_aucs, eps_labels):
+        ax2.text(bar.get_x() + bar.get_width()/2,
+                 bar.get_height() + 0.015,
+                 f"{auc:.3f}", ha="center", va="bottom", fontsize=9)
+
+    ax2.set_xticks(x)
+    ax2.set_xticklabels([f"ε={l}" for l in eps_labels], fontsize=10)
+    ax2.set_ylabel("Final AUC (round 30)")
+    ax2.set_title("Privacy-Utility Tradeoff\n(Final AUC by Privacy Budget ε)")
+    ax2.set_ylim(0.0, 1.05)
+    ax2.legend(fontsize=9)
+    ax2.grid(True, axis="y", alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig("fig5_dp_tradeoff.png")
+    plt.close(fig)
+    print("Saved fig5_dp_tradeoff.png")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -330,4 +405,5 @@ if __name__ == "__main__":
     fig2_security_levels()
     fig3_byzantine()
     fig4_latency_breakdown()
+    fig5_dp_tradeoff()
     print("\nDone.")
