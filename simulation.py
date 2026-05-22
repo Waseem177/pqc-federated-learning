@@ -23,6 +23,7 @@ def parse_args():
     p.add_argument("--mode",    choices=["pqc", "classical", "both"], default="pqc")
     p.add_argument("--lr",      type=float, default=1e-3)
     p.add_argument("--seed",    type=int,   default=42)
+    p.add_argument("--dataset", choices=["mixed", "pima"], default="mixed")
     return p.parse_args()
 
 
@@ -189,8 +190,8 @@ def main():
 
     _bar(f"PQC-FL Healthcare  |  {args.mode.upper()}  |  {n_nodes} nodes  |  {n_rounds}r  |  lr={lr}")
 
-    print("\n[Setup] Loading multi-hospital dataset...")
-    shards = load_and_partition(n_nodes=n_nodes, verbose=True)
+    print(f"\n[Setup] Loading dataset (dataset={args.dataset})...")
+    shards = load_and_partition(n_nodes=n_nodes, verbose=True, dataset=args.dataset)
 
     all_results = {}
     for mode in modes:

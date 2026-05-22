@@ -5,6 +5,7 @@ Runs simulation.py 5 times with different seeds, aggregates mean ± std,
 and saves results_multiseed.json.
 """
 
+import argparse
 import glob
 import json
 import subprocess
@@ -23,21 +24,21 @@ METRICS = ["auc", "sensitivity", "specificity", "f1", "accuracy", "loss"]
 TIMING  = ["avg_enc_ms", "dec_ms", "round_ms"]
 
 
-def run_seed(seed):
+def run_seed(seed, dataset="mixed"):
     print(f"\n{'═'*64}")
     print(f"  Seed {seed}  ({SEEDS.index(seed)+1}/{len(SEEDS)})"
-          f"  — {ROUNDS} rounds, {NODES} nodes, lr={LR}")
+          f"  — {ROUNDS} rounds, {NODES} nodes, lr={LR}, dataset={dataset}")
     print(f"{'═'*64}\n")
     subprocess.run(
         [sys.executable, "simulation.py",
-         "--rounds", str(ROUNDS),
-         "--nodes",  str(NODES),
-         "--mode",   MODE,
-         "--lr",     str(LR),
-         "--seed",   str(seed)],
+         "--rounds",  str(ROUNDS),
+         "--nodes",   str(NODES),
+         "--mode",    MODE,
+         "--lr",      str(LR),
+         "--seed",    str(seed),
+         "--dataset", dataset],
         check=True,
     )
-    # locate the file written by this run
     pattern = f"results_{MODE}_{ROUNDS}r_{NODES}n_seed{seed}_*.json"
     matches = sorted(glob.glob(pattern))
     if not matches:
@@ -119,11 +120,15 @@ def print_summary(final):
 
 
 def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--dataset", choices=["mixed", "pima"], default="mixed")
+    args = p.parse_args()
+
     all_paths = []
     all_seed_rounds = []
 
     for seed in SEEDS:
-        path = run_seed(seed)
+        path = run_seed(seed, dataset=args.dataset)
         all_paths.append(path)
         all_seed_rounds.append(load_rounds(path))
         print(f"  → loaded {path}")
@@ -131,18 +136,21 @@ def main():
     by_round, final = compute_stats(all_seed_rounds)
     print_summary(final)
 
+    suffix = f"_{args.dataset}" if args.dataset != "mixed" else ""
+    out_path = f"results_multiseed{suffix}.json"
+
     output = {
         "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
         "config": {
             "seeds": SEEDS, "rounds": ROUNDS,
             "nodes": NODES, "mode": MODE, "lr": LR,
+            "dataset": args.dataset,
         },
         "final_summary": final,
         "by_round": by_round,
         "seed_files": all_paths,
     }
 
-    out_path = "results_multiseed.json"
     with open(out_path, "w") as f:
         json.dump(output, f, indent=2)
     print(f"Saved to {out_path}\n")

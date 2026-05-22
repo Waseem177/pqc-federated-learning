@@ -84,11 +84,51 @@ def _load_wdbc():
 
 # ── public API ────────────────────────────────────────────────────────────────
 
-def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True):
+def _partition_pima_noniid(X, y, n_nodes, test_ratio, rng):
+    """
+    Non-IID split of Pima dataset across n_nodes hospitals.
+    Simulates real-world skew: hospitals are sorted by patient glucose level
+    (feature index 1 in raw Pima), then divided into contiguous quantile bands.
+    Each hospital has a different glucose distribution → genuine non-IID.
+    """
+    glucose = X[:, 1]
+    order   = np.argsort(glucose)
+    X_sorted, y_sorted = X[order], y[order]
+
+    shards = []
+    bands  = np.array_split(np.arange(len(X_sorted)), n_nodes)
+    for band in bands:
+        Xi, yi = X_sorted[band], y_sorted[band]
+        Xtr, ytr, Xte, yte = _stratified_split(Xi, yi, test_ratio, rng)
+        shards.append((Xtr, ytr, Xte, yte))
+    return shards
+
+
+def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
+                       dataset="mixed"):
+    """
+    dataset="mixed"  — heterogeneous: PIMA + Cleveland + WDBC across 5 nodes
+    dataset="pima"   — homogeneous: Pima diabetes only, non-IID by glucose quartile
+    """
     assert n_nodes == 5, "Multi-hospital setup requires exactly 5 nodes"
 
     rng = np.random.default_rng(seed)
 
+    # ── Pima-only (homogeneous, 5 diabetes clinics) ───────────────────────────
+    if dataset == "pima":
+        X, y = _load_pima()
+        X    = _normalise(X)
+        shards = _partition_pima_noniid(X, y, n_nodes, test_ratio, rng)
+        if verbose:
+            print(f"  Dataset: Pima Indians Diabetes  "
+                  f"(n={len(X)}, non-IID by glucose quartile)")
+            for i, (Xtr, ytr, Xte, yte) in enumerate(shards):
+                print(f"  Node {i}: {len(Xtr):3d} train "
+                      f"({ytr.mean()*100:.1f}% pos) | {len(Xte):3d} test")
+            print(f"  Input dim: {X.shape[1]}")
+        return shards
+
+    # ── Mixed (heterogeneous, multi-disease) ──────────────────────────────────
     X_pima,  y_pima  = _load_pima()
     X_heart, y_heart = _load_cleveland()
     X_wdbc,  y_wdbc  = _load_wdbc()

@@ -47,41 +47,52 @@ GRAY   = "#888888"
 
 # ── Figure 1: FL Convergence ───────────────────────────────────────────────────
 
-def fig1_convergence(path="results_multiseed.json"):
-    d = json.load(open(path))
-    by_round = d["by_round"]
-    rounds = sorted(int(r) for r in by_round.keys())
+def fig1_convergence(mixed_path="results_multiseed.json",
+                     pima_path="results_multiseed_pima.json"):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
 
-    auc_mean = np.array([by_round[str(r)]["auc"]["mean"]   for r in rounds])
-    auc_std  = np.array([by_round[str(r)]["auc"]["std"]    for r in rounds])
-    acc_mean = np.array([by_round[str(r)]["accuracy"]["mean"] for r in rounds])
-    acc_std  = np.array([by_round[str(r)]["accuracy"]["std"]  for r in rounds])
+    def _plot_curve(ax, path, color, acc_color, title):
+        d = json.load(open(path))
+        by_round = d["by_round"]
+        rounds   = sorted(int(r) for r in by_round.keys())
+        auc_mean = np.array([by_round[str(r)]["auc"]["mean"]      for r in rounds])
+        auc_std  = np.array([by_round[str(r)]["auc"]["std"]       for r in rounds])
+        acc_mean = np.array([by_round[str(r)]["accuracy"]["mean"] for r in rounds])
 
-    fig, ax = plt.subplots(figsize=(6.5, 4))
+        ax.plot(rounds, auc_mean, color=color, lw=2, label="AUC (mean, 5 seeds)")
+        ax.fill_between(rounds, auc_mean - auc_std, auc_mean + auc_std,
+                        color=color, alpha=0.20, label="AUC ± 1 std")
+        ax.plot(rounds, acc_mean, color=acc_color, lw=1.8, ls="--",
+                label="Accuracy (mean)")
 
-    ax.plot(rounds, auc_mean, color=BLUE, lw=2, label="AUC (mean, 5 seeds)")
-    ax.fill_between(rounds, auc_mean - auc_std, auc_mean + auc_std,
-                    color=BLUE, alpha=0.20, label="AUC ± 1 std")
+        final = auc_mean[-1]
+        ax.axhline(final, color=color, lw=0.8, ls=":", alpha=0.7)
+        ax.annotate(f"Final AUC = {final:.3f}",
+                    xy=(rounds[-1], final), xytext=(-5, 6),
+                    textcoords="offset points", ha="right",
+                    fontsize=9, color=color)
+        ax.set_xlabel("Communication Round")
+        ax.set_ylabel("Metric Value")
+        ax.set_title(title)
+        ax.set_xlim(1, max(rounds))
+        ax.set_ylim(0.25, 1.0)
+        ax.legend(loc="lower right", fontsize=9)
+        ax.grid(True, alpha=0.3)
 
-    ax.plot(rounds, acc_mean, color=GREEN, lw=2, ls="--", label="Accuracy (mean)")
-    ax.fill_between(rounds, acc_mean - acc_std, acc_mean + acc_std,
-                    color=GREEN, alpha=0.15)
+    _plot_curve(ax1, mixed_path, BLUE, GREEN,
+                "Heterogeneous FL — 5 Hospitals\n"
+                "(PIMA diabetes + Cleveland heart + WDBC cancer)")
 
-    final_auc = auc_mean[-1]
-    ax.axhline(final_auc, color=BLUE, lw=0.8, ls=":", alpha=0.7)
-    ax.annotate(f"Final AUC = {final_auc:.3f}",
-                xy=(rounds[-1], final_auc), xytext=(-5, 6),
-                textcoords="offset points", ha="right",
-                fontsize=9, color=BLUE)
+    if os.path.exists(pima_path):
+        _plot_curve(ax2, pima_path, RED, ORANGE,
+                    "Homogeneous FL — 5 Diabetes Clinics\n"
+                    "(Pima Indians Diabetes, non-IID by glucose quartile)")
+    else:
+        ax2.text(0.5, 0.5, "Pima-only results\nnot yet generated",
+                 ha="center", va="center", transform=ax2.transAxes)
 
-    ax.set_xlabel("Communication Round")
-    ax.set_ylabel("Metric Value")
-    ax.set_title("PQC-FL Convergence — 5 Hospital Nodes (5 Seeds, 50 Rounds)")
-    ax.set_xlim(1, max(rounds))
-    ax.set_ylim(0.3, 1.0)
-    ax.legend(loc="lower right")
-    ax.grid(True, alpha=0.3)
-
+    fig.suptitle("PQC-FL Convergence  (5 seeds × 50 rounds, PQC mode)",
+                 fontsize=12, y=1.01)
     fig.tight_layout()
     fig.savefig("fig1_convergence.png")
     plt.close(fig)
