@@ -3,11 +3,12 @@
 Generate all paper figures for PQC-FL Healthcare project.
 
 Figures produced:
-  fig1_convergence.png       — FL convergence curve (AUC ± std, 5 seeds, 50 rounds)
-  fig2_security_levels.png   — Security level vs latency and overhead (NIST L1/L3/L5)
-  fig3_byzantine.png         — Byzantine defense: clean vs undefended vs defended
-  fig4_latency_breakdown.png — PQC vs Classical per-round latency breakdown
-  fig5_dp_tradeoff.png       — Differential privacy epsilon vs AUC tradeoff
+  fig1_convergence.png        — FL convergence: heterogeneous vs homogeneous FL
+  fig2_security_levels.png    — Security level vs latency and overhead (NIST L1/L3/L5)
+  fig3_byzantine.png          — Byzantine defense: clean vs undefended vs defended
+  fig4_latency_breakdown.png  — PQC vs Classical per-round latency breakdown
+  fig5_dp_tradeoff.png        — Differential privacy epsilon vs AUC tradeoff
+  fig6_comm_overhead.png      — Communication overhead: model payload vs crypto per round
 
 Usage:
   python figures.py
@@ -407,6 +408,83 @@ def fig5_dp_tradeoff():
     print("Saved fig5_dp_tradeoff.png")
 
 
+# ── Figure 6: Communication Overhead ──────────────────────────────────────────
+
+def fig6_comm_overhead():
+    candidates = sorted(glob.glob("results_both_30r_*.json"))
+    if not candidates:
+        print("No PQC-vs-classical results found — skipping fig6")
+        return
+    path = candidates[-1]
+    print(f"  Using comparison file: {os.path.basename(path)}")
+
+    d   = json.load(open(path))
+    pqc = d["rounds_detail"]["pqc"]
+    cls = d["rounds_detail"]["classical"]
+
+    rounds = [r["round"] for r in pqc]
+
+    pqc_net  = np.array([r["net_kb"]     for r in pqc])
+    cls_net  = np.array([r["net_kb"]     for r in cls])
+    pqc_oh   = np.array([r["overhead_b"] / 1024 for r in pqc])
+    cls_oh   = np.array([r["overhead_b"] / 1024 for r in cls])
+    pqc_pay  = pqc_net - pqc_oh
+    cls_pay  = cls_net - cls_oh
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+    # ── Left: stacked area — payload vs crypto overhead ─────────────
+    ax1.stackplot(rounds, pqc_pay, pqc_oh,
+                  labels=["Model weights (PQC)", "PQC crypto overhead"],
+                  colors=[BLUE, RED], alpha=0.75)
+    ax1.stackplot(rounds, cls_pay, cls_oh,
+                  labels=["Model weights (Classical)", "Classical crypto overhead"],
+                  colors=["#A8D8EA", ORANGE], alpha=0.55)
+
+    pqc_avg = float(np.mean(pqc_net))
+    cls_avg = float(np.mean(cls_net))
+    ax1.axhline(pqc_avg, color=BLUE,  lw=1.2, ls="--", alpha=0.8)
+    ax1.axhline(cls_avg, color=GRAY,  lw=1.2, ls="--", alpha=0.8)
+    ax1.text(max(rounds)*0.98, pqc_avg + 1.5, f"PQC mean {pqc_avg:.0f} KB",
+             ha="right", fontsize=8.5, color=BLUE)
+    ax1.text(max(rounds)*0.98, cls_avg - 4.0, f"Classical mean {cls_avg:.0f} KB",
+             ha="right", fontsize=8.5, color=GRAY)
+
+    ax1.set_xlabel("Communication Round")
+    ax1.set_ylabel("Data Transferred per Round (KB)")
+    ax1.set_title("Per-Round Bandwidth: Model Payload vs Crypto Overhead\n"
+                  "(5 nodes × 1 round, PQC vs Classical)")
+    ax1.set_xlim(1, max(rounds))
+    ax1.legend(loc="upper right", fontsize=8.5)
+    ax1.grid(True, axis="y", alpha=0.3)
+
+    # ── Right: cumulative bandwidth ──────────────────────────────────
+    pqc_cumul = np.cumsum(pqc_net)
+    cls_cumul = np.cumsum(cls_net)
+
+    ax2.plot(rounds, pqc_cumul, color=BLUE, lw=2,
+             label=f"PQC  (total {pqc_cumul[-1]:.0f} KB)")
+    ax2.plot(rounds, cls_cumul, color=RED,  lw=2, ls="--",
+             label=f"Classical  (total {cls_cumul[-1]:.0f} KB)")
+    ax2.fill_between(rounds, cls_cumul, pqc_cumul,
+                     color=BLUE, alpha=0.12,
+                     label=f"PQC overhead  (+{pqc_cumul[-1]-cls_cumul[-1]:.0f} KB total)")
+
+    ax2.set_xlabel("Communication Round")
+    ax2.set_ylabel("Cumulative Bandwidth (KB)")
+    ax2.set_title("Cumulative Bandwidth Over 30 Rounds\n"
+                  f"PQC overhead: {np.mean(pqc_oh):.1f} KB/round "
+                  f"({np.mean(pqc_oh)/np.mean(pqc_net)*100:.1f}% of total)")
+    ax2.set_xlim(1, max(rounds))
+    ax2.legend(fontsize=9)
+    ax2.grid(True, alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig("fig6_comm_overhead.png")
+    plt.close(fig)
+    print("Saved fig6_comm_overhead.png")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -417,4 +495,5 @@ if __name__ == "__main__":
     fig3_byzantine()
     fig4_latency_breakdown()
     fig5_dp_tradeoff()
+    fig6_comm_overhead()
     print("\nDone.")
