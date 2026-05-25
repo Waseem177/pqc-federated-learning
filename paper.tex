@@ -356,6 +356,18 @@ This result quantifies the non-IID penalty in single-disease FL
 and motivates the use of heterogeneous cross-domain federation where
 clinically feasible.
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig1_convergence.png}
+  \caption{FL convergence over 50 rounds across 5 random seeds.
+    \textbf{Left:} Heterogeneous federation---5 hospitals spanning diabetes,
+    heart disease, and breast cancer datasets (AUC $0.854 \pm 0.002$).
+    \textbf{Right:} Homogeneous federation---5 diabetes clinics partitioned
+    non-IID by glucose quartile (AUC $0.787 \pm 0.019$).
+    Shaded bands show $\pm 1$ standard deviation across seeds.}
+  \label{fig:convergence}
+\end{figure*}
+
 \begin{table}[t]
   \caption{Final Model Quality (Round 50, 5 Seeds)}
   \label{tab:convergence}
@@ -387,6 +399,7 @@ The advantage is driven by decryption: ML-KEM-768 decapsulation takes
 \textbf{24$\times$ speedup}---because RSA's decryption cost scales
 with key size while lattice-based KEM decapsulation is $O(n \log n)$
 in the polynomial ring dimension.
+Fig.~\ref{fig:latency} shows per-round latency traces across all 30 rounds.
 
 \begin{table}[t]
   \caption{PQC vs.\ Classical: 30 Rounds, 5 Nodes}
@@ -405,6 +418,18 @@ in the polynomial ring dimension.
     \bottomrule
   \end{tabular}
 \end{table}
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig4_latency_breakdown.png}
+  \caption{Per-round latency breakdown over 30 rounds (5 nodes).
+    \textbf{Left:} Node-side encrypt+sign time per round.
+    \textbf{Centre:} Server-side decrypt+verify time per round.
+    \textbf{Right:} Total round time (training + cryptography).
+    PQC decryption (1.41\,ms) is 24$\times$ faster than RSA-4096 (33.44\,ms),
+    yielding a 1.6$\times$ end-to-end speedup (64\,ms vs.\ 101\,ms).}
+  \label{fig:latency}
+\end{figure*}
 
 \subsection{NIST Security Level Comparison}
 
@@ -441,6 +466,19 @@ For a 12\,KB model delta, even the highest security level adds only
   \end{tabular}
 \end{table}
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig2_security_levels.png}
+  \caption{NIST post-quantum security level comparison on a 12\,KB model-delta payload
+    (20 iterations each).
+    \textbf{Left:} Per-operation latency (mean $\pm$ std).
+    All levels complete encrypt+sign and decrypt+verify in under 0.8\,ms.
+    \textbf{Right:} Cryptographic overhead per update bundle, decomposed
+    into KEM ciphertext, signature, and signing public key.
+    Overhead grows from 4.4\,KB (Level~1) to 8.6\,KB (Level~5).}
+  \label{fig:seclevels}
+\end{figure*}
+
 \subsection{Byzantine Attack and Defence}
 
 Fig.~\ref{fig:byzantine} shows the two-part Byzantine evaluation
@@ -467,6 +505,20 @@ These results demonstrate that ML-DSA authentication provides a
 cryptographic first line of defence, while the statistical norm filter
 forms an effective second line.
 
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig3_byzantine.png}
+  \caption{Byzantine attack evaluation over 20 rounds (node~4 as rogue, seed~42).
+    \textbf{Left (Part~A):} Tampered-signature attack.
+    ML-DSA rejects the rogue node in 100\% of rounds; the global model
+    trains on the four honest hospitals only.
+    \textbf{Right (Part~B):} Gradient-poisoning attack (50$\times$ scale).
+    Without defence, AUC drops to 0.789 (7.6\% below clean baseline).
+    With gradient-norm filter, the rogue is rejected in 100\% of rounds.
+    Vertical lines mark rounds where the rogue was detected and rejected.}
+  \label{fig:byzantine}
+\end{figure*}
+
 \subsection{Differential Privacy Tradeoff}
 
 Fig.~\ref{fig:dp} and Table~\ref{tab:dp} show the privacy-utility
@@ -488,6 +540,20 @@ $\varepsilon=1$) overwhelms the gradient signal ($\|\Delta\|_2
 The result provides a practical recommendation: \textbf{for this model
 class, $\varepsilon \ge 10$ provides meaningful privacy at acceptable
 utility cost}.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig5_dp_tradeoff.png}
+  \caption{Differential privacy privacy-utility tradeoff
+    (30 rounds, seed~42, clip $S=0.1$, $\delta=10^{-5}$).
+    \textbf{Left:} Convergence curves for each $\varepsilon$ value.
+    $\varepsilon=50$ (blue) nearly matches the no-DP baseline (purple dashed).
+    \textbf{Right:} Final AUC at round~30 vs.\ privacy budget.
+    The dashed line marks the no-DP baseline (AUC~0.845).
+    At $\varepsilon=10$, the AUC penalty is only $-4.4\%$.
+    At $\varepsilon \le 1$, the noise overwhelms the gradient signal.}
+  \label{fig:dp}
+\end{figure*}
 
 \begin{table}[t]
   \caption{Differential Privacy: Final AUC (Round 30) vs.\ $\varepsilon$}
@@ -525,6 +591,19 @@ Over a 30-round training run, PQC consumes 850\,KB more bandwidth
 than the classical baseline---at 1\,Mbps (a typical hospital VPN),
 this represents an additional 6.8\,seconds per complete run, which
 is negligible relative to the quantum-safety guarantee obtained.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig6_comm_overhead.png}
+  \caption{Communication overhead analysis over 30 rounds (5 nodes).
+    \textbf{Left:} Per-round bandwidth decomposed into model weights
+    (payload) and cryptographic overhead.
+    PQC adds 31.1\,KB/round (27.6\% of total); Classical adds 2.8\,KB/round.
+    \textbf{Right:} Cumulative bandwidth.
+    PQC totals 3381\,KB vs.\ 2531\,KB for Classical---an 850\,KB difference
+    over 30 rounds, equivalent to 6.8\,s on a 1\,Mbps hospital VPN.}
+  \label{fig:overhead}
+\end{figure*}
 
 %==================================================================
 \section{Discussion}
