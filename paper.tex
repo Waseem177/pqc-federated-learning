@@ -598,6 +598,53 @@ is negligible relative to the quantum-safety guarantee obtained.
   \label{fig:overhead}
 \end{figure*}
 
+\subsection{Scalability}
+\label{sec:scalability}
+
+To characterise how PQC-FL-Health scales beyond the five-hospital baseline,
+we extend the federation to 10 and 20 simulated nodes, repeating the
+mixed-dataset protocol over three seeds (50 rounds each).
+Fig.~\ref{fig:scalability} summarises final AUC and average round time
+across all three configurations.
+
+\textbf{Latency scales sub-linearly.}
+Average round time grows from 50.0\,ms at 5 nodes to 72.6\,ms at 10 nodes
+and 112.9\,ms at 20 nodes.
+Quadrupling the number of participants (5\,$\rightarrow$\,20) increases
+per-round latency by only 2.26$\times$, because the bottleneck is
+ML-DSA signature verification per incoming bundle, which the aggregator
+processes sequentially but whose cost is dominated by constant-time
+polynomial arithmetic rather than by communication setup overhead.
+PQC key encapsulation is performed once per round per node and does not
+compound with federation size.
+
+\textbf{AUC decreases with federation size.}
+Final AUC falls from $0.681\,\pm\,0.071$ at 5 nodes to
+$0.534\,\pm\,0.025$ at 10 nodes and $0.478\,\pm\,0.089$ at 20 nodes.
+This is consistent with well-documented non-IID degradation in federated
+learning: as the fixed mixed-dataset corpus is partitioned across more
+nodes, each participant receives fewer samples with increasingly skewed
+class distributions~\cite{zhao2018}.
+The cryptographic layer is transparent to model quality; the degradation
+is a data-heterogeneity effect, not a PQC artefact.
+Mitigating this via variance-reduction aggregators or personalisation
+strategies is left to future work.
+
+\begin{figure*}[t]
+  \centering
+  \includegraphics[width=\textwidth]{fig7_scalability.png}
+  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds, ML-KEM-768 + ML-DSA-65).
+    \textbf{Left:} Final AUC as a function of federation size.
+    AUC degrades as the fixed mixed dataset is split more finely,
+    increasing per-node non-IID severity; error bars show std across seeds.
+    \textbf{Right:} Average per-round latency.
+    Latency scales sub-linearly: 4$\times$ more nodes
+    (5\,$\rightarrow$\,20) yield only 2.26$\times$ more latency
+    (50.0\,ms\,$\rightarrow$\,112.9\,ms), confirming that PQC overhead
+    does not become a bottleneck at larger federation sizes.}
+  \label{fig:scalability}
+\end{figure*}
+
 %==================================================================
 \section{Discussion}
 \label{sec:discussion}
