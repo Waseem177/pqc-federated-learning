@@ -4,3 +4,24 @@ __pycache__/
 .claude/settings.local.json
 results.csv
 CLAUDE.md
+
+# LaTeX build artifacts
+*.aux
+*.log
+*.out
+
+# Windows zone identifier files
+*:Zone.Identifier
+
+# Datasets (download separately)
+*.csv
+
+# Individual run result files (keep only aggregated)
+results_pqc_*.json
+results_both_*.json
+results_byzantine_both_*.json
+results_dp_sweep_*.json
+results_multiseed_*.json
+
+# Misc
+cd
