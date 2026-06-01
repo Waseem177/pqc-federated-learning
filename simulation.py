@@ -21,7 +21,7 @@ def parse_args():
     p.add_argument("--rounds",  type=int,   default=5)
     p.add_argument("--nodes",   type=int,   default=5)
     p.add_argument("--mode",    choices=["pqc", "classical", "both"], default="pqc")
-    p.add_argument("--lr",      type=float, default=1e-3)
+    p.add_argument("--lr",      type=float, default=1e-2)
     p.add_argument("--seed",    type=int,   default=42)
     p.add_argument("--dataset", choices=["mixed", "pima"], default="mixed")
     return p.parse_args()
