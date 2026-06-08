@@ -240,9 +240,9 @@ def fig3_byzantine(multiseed_path="results_multiseed.json"):
     ax2.plot(clean_rounds, clean_auc, color=BLUE, lw=2, ls="--",
              label="Clean baseline (no attack)")
     ax2.plot(byz_rounds, auc_undefended, color=RED, lw=2, marker="s", ms=4,
-             label=f"Under attack, no defense  (final={auc_undefended[-1]:.3f})")
+             label=f"Poisoned update accepted (final={auc_undefended[-1]:.3f})")
     ax2.plot(byz_rounds, auc_defended, color=GREEN, lw=2, marker="^", ms=4,
-             label=f"Under attack + norm filter (final={auc_defended[-1]:.3f})")
+             label=f"Rogue rejected by norm filter (final={auc_defended[-1]:.3f})")
 
     # Annotate detection events for defended case
     for r in byz["part_b"]["with_detection"]["rounds"]:

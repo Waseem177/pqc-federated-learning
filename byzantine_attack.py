@@ -28,6 +28,8 @@ from node import FederatedNode, FeedForwardNN, weights_to_bytes
 from server import AggregationServer
 from pqc_layer import encrypt_and_sign
 
+DEFAULT_LR = 0.01
+
 
 # ── Rogue node variants ────────────────────────────────────────────────────────
 
@@ -78,6 +80,7 @@ def _build_nodes(shards, srv, rogue_id, rogue_cls, rogue_kwargs, seed):
             server_rsa_pub=None,
             hmac_key=b"",
             mode="pqc",
+            lr=DEFAULT_LR,
             model_seed=i * 1000 + seed,
             **kw,
         )

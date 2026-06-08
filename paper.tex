@@ -109,7 +109,7 @@ domain.
 
 \textbf{Contributions.} This paper makes the following contributions:
 \begin{itemize}
-  \item We design and implement \textbf{PQC-FL-Health}, the first
+  \item We design and implement \textbf{PQC-FL-Health}, to our knowledge, the first
     federated learning system for healthcare that simultaneously
     provides quantum-safe channel security (ML-KEM-768),
     authenticated updates (ML-DSA-65), Byzantine robustness
@@ -499,6 +499,12 @@ Without the norm filter, the poisoned model reaches AUC~0.789,
 which is 7.6\% below the clean baseline (0.854).
 With the gradient-norm filter ($3\times$ median threshold), the rogue
 node is rejected in \textbf{100\% of rounds (20/20)}.
+Because node~4 also contains useful Pima-noise training data, rejecting
+it removes an entire hospital contribution and the defended run reaches
+AUC~0.403 over the 20-round stress test.
+Thus the Byzantine experiment should be interpreted primarily as an
+integrity and detection test, with an explicit availability--utility
+tradeoff when a productive hospital is excluded.
 These results demonstrate that ML-DSA authentication provides a
 cryptographic first line of defence, while the statistical norm filter
 forms an effective second line.
@@ -512,7 +518,8 @@ forms an effective second line.
     trains on the four honest hospitals only.
     \textbf{Right (Part~B):} Gradient-poisoning attack (50$\times$ scale).
     Without defence, AUC drops to 0.789 (7.6\% below clean baseline).
-    With gradient-norm filter, the rogue is rejected in 100\% of rounds.
+    With gradient-norm filter, the rogue is rejected in 100\% of rounds,
+    at the cost of removing that hospital shard from aggregation.
     Vertical lines mark rounds where the rogue was detected and rejected.}
   \label{fig:byzantine}
 \end{figure*}
@@ -710,8 +717,9 @@ and 5 seeds.
 PQC operations complete in under 1\,ms at all NIST security levels
 and are 1.6$\times$ faster end-to-end than RSA-4096, despite
 producing 11$\times$ more cryptographic bytes per update.
-An ML-DSA-based Byzantine filter achieves 100\% detection on both
-tampered-signature and gradient-poisoning attacks.
+ML-DSA verification achieves 100\% detection on tampered-signature
+attacks, while the gradient-norm filter detects the scaled poisoning
+attack in 100\% of rounds.
 The DP layer quantifies an explicit privacy-utility tradeoff:
 $\varepsilon \ge 10$ costs under 5\% AUC for this model class.
 We further demonstrate system generalisability on a Pima-only
