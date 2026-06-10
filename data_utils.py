@@ -42,6 +42,27 @@ def _stratified_split(X, y, test_ratio, rng):
     return X[tr_idx], y[tr_idx], X[te_idx], y[te_idx]
 
 
+def _stratified_shards(X, y, n_nodes, test_ratio, rng):
+    """Split pooled data into n_nodes balanced, stratified hospital shards."""
+    if n_nodes < 1:
+        raise ValueError("n_nodes must be at least 1")
+    if n_nodes > len(X):
+        raise ValueError(f"n_nodes={n_nodes} exceeds number of samples={len(X)}")
+
+    pos, neg = np.where(y == 1)[0], np.where(y == 0)[0]
+    rng.shuffle(pos); rng.shuffle(neg)
+    pos_parts = np.array_split(pos, n_nodes)
+    neg_parts = np.array_split(neg, n_nodes)
+
+    shards = []
+    for pos_idx, neg_idx in zip(pos_parts, neg_parts):
+        idx = np.concatenate([pos_idx, neg_idx])
+        rng.shuffle(idx)
+        Xtr, ytr, Xte, yte = _stratified_split(X[idx], y[idx], test_ratio, rng)
+        shards.append((Xtr, ytr, Xte, yte))
+    return shards
+
+
 # ── dataset loaders ───────────────────────────────────────────────────────────
 
 def _load_pima():
@@ -107,11 +128,9 @@ def _partition_pima_noniid(X, y, n_nodes, test_ratio, rng):
 def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
                        dataset="mixed"):
     """
-    dataset="mixed"  — heterogeneous: PIMA + Cleveland + WDBC across 5 nodes
+    dataset="mixed"  — heterogeneous: pooled PIMA + Cleveland + WDBC
     dataset="pima"   — homogeneous: Pima diabetes only, non-IID by glucose quartile
     """
-    assert n_nodes == 5, "Multi-hospital setup requires exactly 5 nodes"
-
     rng = np.random.default_rng(seed)
 
     # ── Pima-only (homogeneous, 5 diabetes clinics) ───────────────────────────
@@ -138,38 +157,21 @@ def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
     X_heart = _normalise(X_heart)
     X_wdbc  = _normalise(X_wdbc)
 
-    # node 4: PIMA with Gaussian noise (different clinic, same disease domain)
-    X_noisy = np.clip(X_pima + rng.normal(0, 0.05, X_pima.shape).astype(np.float32), 0, 1)
-
     # zero-pad all to WDBC dimensionality (largest at 30 features)
     max_dim = max(X_pima.shape[1], X_heart.shape[1], X_wdbc.shape[1])  # 30
     X_pima  = _pad(X_pima,  max_dim)
     X_heart = _pad(X_heart, max_dim)
     X_wdbc  = _pad(X_wdbc,  max_dim)
-    X_noisy = _pad(X_noisy, max_dim)
 
-    # stratified train/test split per dataset
-    Xp_tr, yp_tr, Xp_te, yp_te = _stratified_split(X_pima,  y_pima,  test_ratio, rng)
-    Xh_tr, yh_tr, Xh_te, yh_te = _stratified_split(X_heart, y_heart, test_ratio, rng)
-    Xw_tr, yw_tr, Xw_te, yw_te = _stratified_split(X_wdbc,  y_wdbc,  test_ratio, rng)
-    Xn_tr, yn_tr, Xn_te, yn_te = _stratified_split(X_noisy, y_pima,  test_ratio, rng)
-
-    # split PIMA train into two equal shards for nodes 0 and 1
-    mid = len(Xp_tr) // 2
-
-    shards = [
-        (Xp_tr[:mid], yp_tr[:mid], Xp_te, yp_te),   # 0: PIMA shard A  (diabetes)
-        (Xp_tr[mid:], yp_tr[mid:], Xp_te, yp_te),   # 1: PIMA shard B  (diabetes)
-        (Xh_tr,       yh_tr,       Xh_te, yh_te),   # 2: Cleveland     (heart disease)
-        (Xw_tr,       yw_tr,       Xw_te, yw_te),   # 3: WDBC          (breast cancer)
-        (Xn_tr,       yn_tr,       Xn_te, yn_te),   # 4: PIMA + noise  (diabetes, noisy)
-    ]
+    X_all = np.concatenate([X_pima, X_heart, X_wdbc], axis=0)
+    y_all = np.concatenate([y_pima, y_heart, y_wdbc], axis=0)
+    shards = _stratified_shards(X_all, y_all, n_nodes, test_ratio, rng)
 
     if verbose:
-        names = ["PIMA-A (diabetes)", "PIMA-B (diabetes)",
-                 "Cleveland (heart) ", "WDBC (cancer)    ", "PIMA+noise (diab.)"]
-        for i, (nm, (Xtr, ytr, Xte, yte)) in enumerate(zip(names, shards)):
-            print(f"  Node {i} [{nm}]: {len(Xtr):4d} train "
+        print(f"  Dataset: pooled PIMA + Cleveland + WDBC "
+              f"(stratified into {n_nodes} shards)")
+        for i, (Xtr, ytr, Xte, yte) in enumerate(shards):
+            print(f"  Node {i}: {len(Xtr):4d} train "
                   f"({ytr.mean()*100:.1f}% pos) | {len(Xte):3d} test")
         print(f"  Input dim: {max_dim}  (PIMA/Heart zero-padded to WDBC size)")
         print(f"  Datasets: PIMA n={len(X_pima)}, "
