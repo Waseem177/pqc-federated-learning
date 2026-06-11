@@ -50,7 +50,7 @@ def run_one(n_nodes, seed, n_rounds=N_ROUNDS):
         nd = FederatedNode(
             node_id=i, X_train=Xtr, y_train=ytr, X_test=Xte, y_test=yte,
             server_kem_pub=srv.kem_public_key, server_rsa_pub=None,
-            hmac_key=b"", lr=1e-3, mode="pqc", model_seed=i * 1000 + seed,
+            hmac_key=b"", lr=1e-2, mode="pqc", model_seed=i * 1000 + seed,
         )
         srv.register_node(i, len(Xtr))
         nodes.append(nd)
