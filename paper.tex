@@ -641,6 +641,21 @@ Over 30 rounds, PQC consumes 850\,KB more bandwidth than
 classical---at 1\,Mbps, about 6.8 additional seconds per training
 run, a negligible cost for quantum-safe guarantees.
 
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth]{fig7_scalability.png}
+  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds,
+    ML-KEM-768 + ML-DSA-65).
+    \textbf{Left:} Final AUC vs.\ federation size.
+    AUC remains stable at $0.862 \pm 0.010$ across 5, 10, and 20
+    nodes; error bars show std across seeds.
+    \textbf{Right:} Average per-round latency.
+    Latency is flat at 63--65\,ms regardless of node count,
+    confirming that PQC overhead does not compound with federation
+    size.}
+  \label{fig:scalability}
+\end{figure*}
+
 \subsection{Scalability}
 \label{sec:scalability}
 
@@ -662,21 +677,6 @@ FedAvg partitioning, this is expected by construction (the weighted
 gradient average is invariant to the number of equal shards).
 The genuine scalability finding is the flat cryptographic overhead:
 quadrupling the federation produces no measurable latency penalty.
-
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=\textwidth]{fig7_scalability.png}
-  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds,
-    ML-KEM-768 + ML-DSA-65).
-    \textbf{Left:} Final AUC vs.\ federation size.
-    AUC remains stable at $0.862 \pm 0.010$ across 5, 10, and 20
-    nodes; error bars show std across seeds.
-    \textbf{Right:} Average per-round latency.
-    Latency is flat at 63--65\,ms regardless of node count,
-    confirming that PQC overhead does not compound with federation
-    size.}
-  \label{fig:scalability}
-\end{figure*}
 
 %==================================================================
 \section{Conclusion}
