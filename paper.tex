@@ -646,7 +646,7 @@ run, a negligible cost for quantum-safe guarantees.
 To test how PQC-FL-Health scales beyond the five-hospital baseline,
 we extend the federation to 10 and 20 simulated nodes, repeating the
 mixed-dataset protocol over three seeds (50 rounds each).
-Fig.~\ref{fig:scalability} summarises final AUC and average round
+Table~\ref{fig:scalability} summarises final AUC and average round
 time for all three configurations.
 
 \textbf{PQC overhead does not compound with federation size.}
@@ -662,20 +662,23 @@ gradient average is invariant to the number of equal shards).
 The genuine scalability finding is the flat cryptographic overhead:
 quadrupling the federation produces no measurable latency penalty.
 
-\begin{figure*}[t!]
-  \centering
-  \includegraphics[width=\textwidth]{fig7_scalability.png}
-  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds,
-    ML-KEM-768 + ML-DSA-65).
-    \textbf{Left:} Final AUC vs.\ federation size.
-    AUC remains stable at $0.862 \pm 0.010$ across 5, 10, and 20
-    nodes; error bars show std across seeds.
-    \textbf{Right:} Average per-round latency.
-    Latency is flat at 63--65\,ms regardless of node count,
-    confirming that PQC overhead does not compound with federation
-    size.}
+\begin{table}[t]
+  \caption{PQC-FL-Health Scalability (50 Rounds, 3 Seeds)}
   \label{fig:scalability}
-\end{figure*}
+  \centering
+  \begin{tabular}{ccc}
+    \toprule
+    \textbf{Nodes} & \textbf{Final AUC} & \textbf{Avg Round (ms)} \\
+    \midrule
+    5  & $0.862 \pm 0.010$ & $63.8 \pm 1.0$ \\
+    10 & $0.862 \pm 0.010$ & $63.0 \pm 0.2$ \\
+    20 & $0.862 \pm 0.010$ & $65.5 \pm 0.8$ \\
+    \bottomrule
+  \end{tabular}
+  \\[3pt]
+  {\footnotesize AUC invariant by FedAvg construction (proportional
+  partitioning); the key finding is flat PQC latency across all scales.}
+\end{table}
 
 %==================================================================
 \section{Conclusion}
@@ -704,9 +707,9 @@ attacks, and the gradient-norm filter catches all tested scaled-gradient
 poisoning attempts (single rogue node, 50$\times$ scale, seed~42).
 The DP layer shows that $\varepsilon \ge 10$ costs under 5\% AUC
 for this model class.
-Scalability experiments confirm that AUC and round latency remain
-stable when the federation grows from 5 to 20 nodes, with PQC
-overhead unchanged at 63--65\,ms per round.
+Scalability experiments confirm that round latency remains flat at
+63--65\,ms when the federation grows from 5 to 20 nodes, with PQC
+cryptographic overhead not compounding with federation size.
 
 Current limitations include the small model size (1531 parameters,
 which restricts viable DP budgets), single-CPU experiments without
