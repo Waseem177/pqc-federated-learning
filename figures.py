@@ -213,8 +213,10 @@ def fig2_security_levels(path="results_security_levels_20iter_20260518_063541.js
 # ── Figure 3: Byzantine Defense ────────────────────────────────────────────────
 
 def fig3_byzantine(multiseed_path="results_multiseed.json"):
-    # Pick the latest 20-round Byzantine results file
-    candidates = sorted(glob.glob("results_byzantine_both_20r_*.json"))
+    # Prefer multi-seed files, fall back to single-seed
+    multi = sorted(glob.glob("results_byzantine_both_20r_*seeds*.json"))
+    single = sorted(glob.glob("results_byzantine_both_20r_seed*.json"))
+    candidates = multi if multi else single
     if not candidates:
         candidates = sorted(glob.glob("results_byzantine_both_*.json"))
     if not candidates:
@@ -227,69 +229,104 @@ def fig3_byzantine(multiseed_path="results_multiseed.json"):
     ms  = json.load(open(multiseed_path))
 
     n_rounds_byz = byz["rounds"]
+    is_multi = "seed_results" in byz
 
-    # Clean baseline from multiseed (use first n_rounds_byz rounds, mean only)
+    # Clean baseline from multiseed
     by_round = ms["by_round"]
     clean_rounds = list(range(1, n_rounds_byz + 1))
     clean_auc = np.array([by_round[str(r)]["auc"]["mean"] for r in clean_rounds
                           if str(r) in by_round])
     clean_rounds = clean_rounds[:len(clean_auc)]
 
-    # Part B: undefended vs defended
-    byz_rounds    = [r["round"] for r in byz["part_b"]["without_detection"]["rounds"]]
-    auc_undefended = np.array([r["auc"] for r in byz["part_b"]["without_detection"]["rounds"]])
-    auc_defended   = np.array([r["auc"] for r in byz["part_b"]["with_detection"]["rounds"]])
+    if is_multi:
+        n_seeds = len(byz["seed_results"])
+        seed_results = byz["seed_results"]
 
-    # Detection indicators for Part A (all True = 100%)
-    part_a_detected = [r["detected"] for r in byz["part_a"]["rounds"]]
-    detection_rate  = sum(part_a_detected) / len(part_a_detected)
+        # Aggregate Part A per round
+        byz_rounds = list(range(1, n_rounds_byz + 1))
+        a_aucs_per_round = np.array([[r["auc"] for r in sr["part_a"]["rounds"]]
+                                     for sr in seed_results])
+        a_det_rates = [sr["part_a"]["detection_rate"] for sr in seed_results]
+        a_rate_mean = np.mean(a_det_rates)
+
+        # Aggregate Part B per round
+        b_def_per_round   = np.array([[r["auc"] for r in sr["part_b"]["with_detection"]["rounds"]]
+                                      for sr in seed_results])
+        b_undef_per_round = np.array([[r["auc"] for r in sr["part_b"]["without_detection"]["rounds"]]
+                                      for sr in seed_results])
+        b_def_aucs   = [sr["part_b"]["with_detection"]["final_auc"]    for sr in seed_results]
+        b_undef_aucs = [sr["part_b"]["without_detection"]["final_auc"] for sr in seed_results]
+        b_det_rates  = [sr["part_b"]["with_detection"]["detection_rate"] for sr in seed_results]
+        poison_scale = seed_results[0]["part_b"]["poison_scale"]
+        rogue_node   = byz["rogue_node"]
+    else:
+        byz_rounds    = [r["round"] for r in byz["part_b"]["without_detection"]["rounds"]]
+        a_aucs_per_round = np.array([[r["auc"] for r in byz["part_a"]["rounds"]]])
+        a_det_rates   = [byz["part_a"]["detection_rate"]]
+        a_rate_mean   = byz["part_a"]["detection_rate"]
+        b_def_per_round   = np.array([[r["auc"] for r in byz["part_b"]["with_detection"]["rounds"]]])
+        b_undef_per_round = np.array([[r["auc"] for r in byz["part_b"]["without_detection"]["rounds"]]])
+        b_def_aucs    = [byz["part_b"]["with_detection"]["final_auc"]]
+        b_undef_aucs  = [byz["part_b"]["without_detection"]["final_auc"]]
+        b_det_rates   = [byz["part_b"]["with_detection"]["detection_rate"]]
+        poison_scale  = byz["part_b"]["poison_scale"]
+        rogue_node    = byz["rogue_node"]
+        n_seeds = 1
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
     # ── Left: Part A — Signature Attack ─────────────────────────────
-    part_a_auc = [r["auc"] for r in byz["part_a"]["rounds"]]
-    ax1.plot(byz_rounds, part_a_auc, color=RED, lw=2, marker="o", ms=4,
+    a_mu = a_aucs_per_round.mean(axis=0)
+    a_sd = a_aucs_per_round.std(axis=0)
+    ax1.plot(byz_rounds, a_mu, color=RED, lw=2, marker="o", ms=4,
              label="AUC (sig attack active)")
+    if n_seeds > 1:
+        ax1.fill_between(byz_rounds, a_mu - a_sd, a_mu + a_sd, color=RED, alpha=0.2)
     ax1.plot(clean_rounds, clean_auc, color=BLUE, lw=2, ls="--",
              label="Clean baseline (no attack)")
+    ax1.axvspan(1, n_rounds_byz, color=GREEN, alpha=0.05)
 
-    for rnd, detected in zip(byz_rounds, part_a_detected):
-        ax1.axvline(rnd, color=GREEN, lw=0.5, alpha=0.4)
-
+    seed_note = f"{n_seeds} seeds" if n_seeds > 1 else f"seed {byz.get('seed', byz.get('seeds', [42])[0])}"
     ax1.set_xlabel("Communication Round")
     ax1.set_ylabel("Global AUC")
     ax1.set_title(f"Part A — Tampered Signature Attack\n"
-                  f"ML-DSA detection rate: {detection_rate*100:.0f}%  (rogue=node {byz['rogue_node']})")
+                  f"ML-DSA detection: {a_rate_mean*100:.0f}%  "
+                  f"({n_seeds*n_rounds_byz}/{n_seeds*n_rounds_byz} rounds, {seed_note})")
     ax1.set_ylim(0.2, 1.0)
     ax1.set_xlim(1, n_rounds_byz)
     ax1.legend()
     ax1.grid(True, alpha=0.3)
-
-    # Green band annotation: "Rogue rejected every round"
     ax1.text(0.97, 0.06,
-             f"Rogue node rejected\nin {int(detection_rate*100)}% of rounds",
+             f"Rogue rejected\n100% of rounds",
              transform=ax1.transAxes, ha="right", va="bottom",
              fontsize=9, color=GREEN,
              bbox=dict(boxstyle="round,pad=0.3", facecolor="white", edgecolor=GREEN, alpha=0.8))
 
     # ── Right: Part B — Gradient Poisoning ──────────────────────────
+    def_mu   = b_def_per_round.mean(axis=0)
+    def_sd   = b_def_per_round.std(axis=0)
+    undef_mu = b_undef_per_round.mean(axis=0)
+    undef_sd = b_undef_per_round.std(axis=0)
+    final_def   = np.mean(b_def_aucs)
+    final_undef = np.mean(b_undef_aucs)
+
     ax2.plot(clean_rounds, clean_auc, color=BLUE, lw=2, ls="--",
              label="Clean baseline (no attack)")
-    ax2.plot(byz_rounds, auc_undefended, color=RED, lw=2, marker="s", ms=4,
-             label=f"Poisoned update accepted (final={auc_undefended[-1]:.3f})")
-    ax2.plot(byz_rounds, auc_defended, color=GREEN, lw=2, marker="^", ms=4,
-             label=f"Rogue rejected by norm filter (final={auc_defended[-1]:.3f})")
+    ax2.plot(byz_rounds, undef_mu, color=RED, lw=2, marker="s", ms=4,
+             label=f"Poisoned (undefended, final={final_undef:.3f}±{np.std(b_undef_aucs):.3f})")
+    ax2.plot(byz_rounds, def_mu, color=GREEN, lw=2, marker="^", ms=4,
+             label=f"Defended (norm filter, final={final_def:.3f}±{np.std(b_def_aucs):.3f})")
+    if n_seeds > 1:
+        ax2.fill_between(byz_rounds, undef_mu - undef_sd, undef_mu + undef_sd,
+                         color=RED, alpha=0.15)
+        ax2.fill_between(byz_rounds, def_mu - def_sd, def_mu + def_sd,
+                         color=GREEN, alpha=0.15)
 
-    # Annotate detection events for defended case
-    for r in byz["part_b"]["with_detection"]["rounds"]:
-        if r["detected"]:
-            ax2.axvline(r["round"], color=GREEN, lw=0.5, alpha=0.3)
-
-    b_det_rate = byz["part_b"]["with_detection"]["detection_rate"]
+    b_rate_mean = np.mean(b_det_rates)
     ax2.set_xlabel("Communication Round")
     ax2.set_ylabel("Global AUC")
-    ax2.set_title(f"Part B — Gradient Poisoning Attack  (scale={byz['part_b']['poison_scale']}×)\n"
-                  f"Norm-filter detection rate: {b_det_rate*100:.0f}%")
+    ax2.set_title(f"Part B — Gradient Poisoning  (scale={poison_scale:.0f}×)\n"
+                  f"Norm-filter detection: {b_rate_mean*100:.0f}%  ({seed_note})")
     ax2.set_ylim(0.2, 1.0)
     ax2.set_xlim(1, n_rounds_byz)
     ax2.legend(loc="upper left", fontsize=9)
@@ -373,7 +410,10 @@ def fig4_latency_breakdown():
 # ── Figure 5: Differential Privacy Tradeoff ───────────────────────────────────
 
 def fig5_dp_tradeoff():
-    candidates = sorted(glob.glob("results_dp_sweep_*.json"))
+    # Prefer multi-seed files; fall back to single-seed
+    multi = sorted(glob.glob("results_dp_sweep_*seeds*.json"))
+    single = sorted(glob.glob("results_dp_sweep_30r_seed*.json"))
+    candidates = multi if multi else single
     if not candidates:
         print("No DP sweep results found — skipping fig5")
         return
@@ -381,60 +421,91 @@ def fig5_dp_tradeoff():
     print(f"  Using DP file: {os.path.basename(path)}")
 
     d = json.load(open(path))
-    results = d["results"]
+    n_rounds = d["rounds"]
+    n_seeds  = len(d.get("seeds", [d.get("seed", 42)]))
+    is_multi = "summary" in d and n_seeds > 1
 
-    # Parse epsilon labels (inf → ∞)
-    eps_labels = []
-    eps_vals   = []   # float for sorting; inf for no-DP
-    for r in results:
-        e = r["epsilon"]
-        eps_labels.append("∞" if e == "inf" else e)
-        eps_vals.append(float("inf") if e == "inf" else float(e))
+    if is_multi:
+        # Multi-seed: use summary for bar chart, average curves for left panel
+        summary = d["summary"]
+        eps_order = ["0.5", "1.0", "5.0", "10.0", "50.0", "inf"]
+        eps_labels = ["0.5", "1.0", "5.0", "10.0", "50.0", "∞"]
+        means = [summary[e]["mean"] for e in eps_order]
+        stds  = [summary[e]["std"]  for e in eps_order]
 
-    final_aucs = [r["final_auc"] for r in results]
-    n_rounds   = d["rounds"]
+        # Average per-round AUC across seeds per epsilon
+        from collections import defaultdict
+        round_aucs = defaultdict(lambda: defaultdict(list))
+        for sr in d["seed_results"]:
+            for r in sr["results"]:
+                eps_key = r["epsilon"]
+                for entry in r["rounds"]:
+                    round_aucs[eps_key][entry["round"]].append(entry["auc"])
+        avg_curves = {}
+        for eps_key, rnd_dict in round_aucs.items():
+            rounds = sorted(rnd_dict)
+            avg_curves[eps_key] = (rounds,
+                                   [np.mean(rnd_dict[rnd]) for rnd in rounds],
+                                   [np.std(rnd_dict[rnd])  for rnd in rounds])
+    else:
+        results = d["results"]
+        eps_order  = [r["epsilon"] for r in results]
+        eps_labels = ["∞" if e == "inf" else e for e in eps_order]
+        means = [r["final_auc"] for r in results]
+        stds  = [0.0] * len(means)
 
-    # Colour map: one colour per epsilon
     colors = [RED, ORANGE, "#F4D03F", GREEN, BLUE, "#7D3C98"]
-
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
 
-    # ── Left: convergence curves per epsilon ────────────────────────
-    for i, r in enumerate(results):
-        rds  = [x["round"] for x in r["rounds"]]
-        aucs = [x["auc"]   for x in r["rounds"]]
-        lbl  = f"ε = {eps_labels[i]}"
-        lw   = 2.5 if r["epsilon"] == "inf" else 1.8
-        ls   = "--" if r["epsilon"] == "inf" else "-"
-        ax1.plot(rds, aucs, color=colors[i], lw=lw, ls=ls, label=lbl)
+    # ── Left: mean convergence curves (± std band) ──────────────────
+    for i, eps_key in enumerate(eps_order):
+        lbl = f"ε = {eps_labels[i]}"
+        lw  = 2.5 if eps_key == "inf" else 1.8
+        ls  = "--" if eps_key == "inf" else "-"
+        if is_multi:
+            rds, mu, sd = avg_curves[eps_key]
+            ax1.plot(rds, mu, color=colors[i], lw=lw, ls=ls, label=lbl)
+            ax1.fill_between(rds,
+                             [m - s for m, s in zip(mu, sd)],
+                             [m + s for m, s in zip(mu, sd)],
+                             color=colors[i], alpha=0.15)
+        else:
+            r = d["results"][i]
+            rds  = [x["round"] for x in r["rounds"]]
+            aucs = [x["auc"]   for x in r["rounds"]]
+            ax1.plot(rds, aucs, color=colors[i], lw=lw, ls=ls, label=lbl)
 
+    seed_note = f"{n_seeds} seeds" if n_seeds > 1 else f"seed {d.get('seed', 42)}"
     ax1.set_xlabel("Communication Round")
     ax1.set_ylabel("Global AUC")
     ax1.set_title(f"Convergence Under Differential Privacy\n"
-                  f"(clip={d['dp_clip']}, δ={d['dp_delta']}, {n_rounds} rounds)")
+                  f"(clip={d['dp_clip']}, δ={d['dp_delta']}, {n_rounds}r, {seed_note})")
     ax1.set_xlim(1, n_rounds)
     ax1.set_ylim(0.0, 1.0)
     ax1.legend(loc="upper left", fontsize=9)
     ax1.grid(True, alpha=0.3)
 
-    # ── Right: final AUC vs epsilon bar chart ───────────────────────
+    # ── Right: final AUC bar chart with error bars ───────────────────
     x = np.arange(len(eps_labels))
-    bars = ax2.bar(x, final_aucs, color=colors, width=0.6, edgecolor="white", lw=0.8)
+    bars = ax2.bar(x, means, yerr=stds if is_multi else None,
+                   color=colors, width=0.6, edgecolor="white", lw=0.8,
+                   capsize=4, error_kw={"elinewidth": 1.5})
 
-    baseline_auc = results[-1]["final_auc"]   # ε=∞
-    ax2.axhline(baseline_auc, color="black", lw=1.2, ls="--", alpha=0.6,
-                label=f"No-DP baseline ({baseline_auc:.3f})")
+    baseline = means[-1]
+    ax2.axhline(baseline, color="black", lw=1.2, ls="--", alpha=0.6,
+                label=f"No-DP baseline ({baseline:.3f})")
 
-    for bar, auc, lbl in zip(bars, final_aucs, eps_labels):
+    for bar, m, s, lbl in zip(bars, means, stds, eps_labels):
+        label_txt = f"{m:.3f}" if not is_multi else f"{m:.3f}±{s:.3f}"
         ax2.text(bar.get_x() + bar.get_width()/2,
-                 bar.get_height() + 0.015,
-                 f"{auc:.3f}", ha="center", va="bottom", fontsize=9)
+                 bar.get_height() + (s if is_multi else 0) + 0.015,
+                 label_txt, ha="center", va="bottom", fontsize=8)
 
     ax2.set_xticks(x)
     ax2.set_xticklabels([f"ε={l}" for l in eps_labels], fontsize=10)
-    ax2.set_ylabel("Final AUC (round 30)")
+    ax2.set_ylabel(f"Final AUC (round {n_rounds})")
     ax2.set_title("Privacy-Utility Tradeoff\n(Final AUC by Privacy Budget ε)")
-    ax2.set_ylim(0.0, 1.05)
+    ax2.set_ylim(0.0, 1.10)
     ax2.legend(fontsize=9)
     ax2.grid(True, axis="y", alpha=0.3)
 

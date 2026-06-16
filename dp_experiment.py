@@ -74,45 +74,55 @@ def run_one(shards, n_rounds, epsilon, seed):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--rounds", type=int, default=30)
-    p.add_argument("--seed",   type=int, default=42)
+    p.add_argument("--seeds",  type=int, nargs="+", default=[42, 123, 456])
     args = p.parse_args()
 
-    print(f"\nLoading dataset (5 nodes, mixed)...")
-    shards, _ = load_and_partition(n_nodes=5, verbose=False, dataset="mixed")
+    print(f"\nLoading dataset (5 nodes, pima)...")
+    shards, _ = load_and_partition(n_nodes=5, verbose=False, dataset="pima")
     print(f"Epsilons: {EPSILONS}")
-    print(f"Rounds: {args.rounds}  |  Seed: {args.seed}")
+    print(f"Rounds: {args.rounds}  |  Seeds: {args.seeds}")
     print(f"DP params: clip={DP_CLIP}, delta={DP_DELTA}")
 
-    results = []
+    # per_eps[eps_str] = list of final_aucs across seeds
+    per_eps = {(str(e) if e != float("inf") else "inf"): [] for e in EPSILONS}
+    seed_results = []
+
+    for seed in args.seeds:
+        print(f"\n{'━'*56}  seed={seed}")
+        seed_run = []
+        for eps in EPSILONS:
+            res = run_one(shards, args.rounds, eps, seed)
+            seed_run.append(res)
+            per_eps[res["epsilon"]].append(res["final_auc"])
+        seed_results.append({"seed": seed, "results": seed_run})
+
+    # Summary table
+    print(f"\n{'Epsilon':>12}  {'AUC mean':>10}  {'AUC std':>9}  {'sigma':>10}")
+    print("─" * 48)
+    summary = {}
     for eps in EPSILONS:
-        res = run_one(shards, args.rounds, eps, args.seed)
-        results.append(res)
+        eps_str = "inf" if eps == float("inf") else str(eps)
+        aucs = per_eps[eps_str]
+        mean, std = float(np.mean(aucs)), float(np.std(aucs))
+        sigma_str = "0 (no DP)" if eps == float("inf") else f"{_dp_noise_sigma(float(eps)):.4f}"
+        print(f"{eps_str:>12}  {mean:>10.3f}  {std:>9.3f}  {sigma_str:>10}")
+        summary[eps_str] = {"mean": mean, "std": std, "aucs": aucs}
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    n_seeds = len(args.seeds)
+    path = f"results_dp_sweep_{args.rounds}r_{n_seeds}seeds_{ts}.json"
     out = {
         "timestamp": datetime.now().isoformat(),
         "rounds": args.rounds,
-        "seed": args.seed,
+        "seeds": args.seeds,
         "dp_clip": DP_CLIP,
         "dp_delta": DP_DELTA,
-        "results": results,
+        "seed_results": seed_results,
+        "summary": summary,
     }
-    path = f"results_dp_sweep_{args.rounds}r_seed{args.seed}_{ts}.json"
     with open(path, "w") as f:
         json.dump(out, f, indent=2)
     print(f"\nSaved {path}")
-
-    # Summary table
-    print(f"\n{'Epsilon':>12}  {'Final AUC':>10}  {'sigma':>10}")
-    print("─" * 38)
-    for r in results:
-        eps = r["epsilon"]
-        auc = r["final_auc"]
-        if eps == "inf":
-            sigma_str = "0 (no DP)"
-        else:
-            sigma_str = f"{_dp_noise_sigma(float(eps)):.4f}"
-        print(f"{eps:>12}  {auc:>10.3f}  {sigma_str:>10}")
 
 
 if __name__ == "__main__":

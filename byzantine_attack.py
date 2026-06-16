@@ -193,33 +193,60 @@ def main():
     p.add_argument("--attack",       choices=["signature", "poisoning", "both"], default="both")
     p.add_argument("--rogue-node",   type=int,   default=4)
     p.add_argument("--poison-scale", type=float, default=50.0)
-    p.add_argument("--seed",         type=int,   default=42)
+    p.add_argument("--seeds",        type=int,   nargs="+", default=[42, 123, 456])
     args = p.parse_args()
 
-    print(f"\n[Setup] Loading dataset (5 nodes)...")
-    shards = load_and_partition(n_nodes=5, verbose=False)
+    seed_results = []
+    for seed in args.seeds:
+        print(f"\n{'━'*64}")
+        print(f"  Seed {seed}")
+        print(f"{'━'*64}")
+        shards, _ = load_and_partition(n_nodes=5, verbose=False, dataset="mixed")
+        result = {"seed": seed}
 
-    output = {
+        if args.attack in ("signature", "both"):
+            log, rate = run_signature_attack(shards, args.rounds, args.rogue_node, seed)
+            result["part_a"] = {"rounds": log, "detection_rate": float(rate)}
+
+        if args.attack in ("poisoning", "both"):
+            res = run_poisoning_attack(
+                shards, args.rounds, args.rogue_node, args.poison_scale, seed
+            )
+            result["part_b"] = {"poison_scale": args.poison_scale, **res}
+
+        seed_results.append(result)
+
+    # Aggregate and print summary
+    print(f"\n{'═'*64}")
+    print(f"  SUMMARY  ({len(args.seeds)} seeds × {args.rounds} rounds)")
+    print(f"{'═'*64}")
+
+    if args.attack in ("signature", "both"):
+        rates = [r["part_a"]["detection_rate"] for r in seed_results]
+        total_rounds = len(args.seeds) * args.rounds
+        detected = sum(int(r * args.rounds) for r in rates)
+        print(f"  Part A detection rate: {np.mean(rates)*100:.1f}% ± {np.std(rates)*100:.1f}%"
+              f"  ({detected}/{total_rounds} rounds)")
+
+    if args.attack in ("poisoning", "both"):
+        def_aucs   = [r["part_b"]["with_detection"]["final_auc"]    for r in seed_results]
+        undef_aucs = [r["part_b"]["without_detection"]["final_auc"] for r in seed_results]
+        print(f"  Part B defended AUC:   {np.mean(def_aucs):.3f} ± {np.std(def_aucs):.3f}")
+        print(f"  Part B undefended AUC: {np.mean(undef_aucs):.3f} ± {np.std(undef_aucs):.3f}")
+
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    n_seeds = len(args.seeds)
+    out_path = (f"results_byzantine_{args.attack}_{args.rounds}r_"
+                f"{n_seeds}seeds_{ts}.json")
+    out = {
         "timestamp": datetime.now().isoformat(),
         "rounds": args.rounds,
         "rogue_node": args.rogue_node,
-        "seed": args.seed,
+        "seeds": args.seeds,
+        "seed_results": seed_results,
     }
-
-    if args.attack in ("signature", "both"):
-        log, rate = run_signature_attack(shards, args.rounds, args.rogue_node, args.seed)
-        output["part_a"] = {"rounds": log, "detection_rate": rate}
-
-    if args.attack in ("poisoning", "both"):
-        res = run_poisoning_attack(
-            shards, args.rounds, args.rogue_node, args.poison_scale, args.seed
-        )
-        output["part_b"] = {"poison_scale": args.poison_scale, **res}
-
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = f"results_byzantine_{args.attack}_{args.rounds}r_seed{args.seed}_{ts}.json"
     with open(out_path, "w") as f:
-        json.dump(output, f, indent=2)
+        json.dump(out, f, indent=2)
     print(f"\nResults saved to {out_path}")
 
 

@@ -55,9 +55,10 @@ cryptographic overhead per round.
 ML-DSA signature verification detects 100\% of tampered-signature
 attacks; a gradient-norm filter catches all tested scaled-gradient
 poisoning attempts.
-At $\varepsilon = 10$, differential privacy costs only 4.4\% AUC,
-while budgets at or below $\varepsilon = 1$ cause severe degradation
-due to noise overwhelming the gradient signal in a small model.
+At $\varepsilon = 10$, differential privacy costs 15\% AUC on the
+homogeneous federation; budgets at or below $\varepsilon = 1$ cause
+both severe degradation and high cross-seed variance, confirming that
+tight DP is not viable for 1531-parameter models.
 All code, datasets, and results are publicly available.
 \end{abstract}
 
@@ -530,13 +531,14 @@ in bytes, a modest cost for quantum-safe guarantees.
 \subsection{Byzantine Attack and Defence}
 
 Fig.~\ref{fig:byzantine} shows the two-part Byzantine evaluation
-over 20 rounds with node~4 as the rogue node.
+over 20 rounds with node~4 as the rogue node, repeated across
+3 random seeds (60 rounds total per attack type).
 
 \textbf{Part A: Tampered Signature Attack.}
 The rogue node flips the first 32 bytes of its ML-DSA signature
 before transmission.
 ML-DSA verification rejects the bundle in \textbf{100\% of rounds
-(20/20)}.
+across all 3 seeds (60/60)}.
 The global model trains on the remaining four honest nodes and
 converges more slowly than the clean baseline, reflecting the lost
 data contribution from one hospital shard, but no adversarial
@@ -545,12 +547,12 @@ gradient ever enters the global model.
 \textbf{Part B: Gradient Poisoning Attack.}
 The rogue node sends a correctly signed but 50$\times$-scaled gradient
 delta.
-Without the norm filter, the poisoned model reaches AUC~0.567 at
-round~20, far below the clean baseline.
+Without the norm filter, the poisoned model reaches
+AUC~$0.619 \pm 0.114$ at round~20, far below the clean baseline.
 With the gradient-norm filter ($3\times$ median threshold), the rogue
-node is rejected in \textbf{100\% of rounds (20/20)}, and the
-defended model recovers to AUC~0.801.
-The delta between defended (0.801) and undefended (0.567) AUC
+node is rejected in \textbf{100\% of rounds across all seeds}, and the
+defended model recovers to AUC~$0.865 \pm 0.006$.
+The $\Delta = +0.246$ gap between defended and undefended AUC
 directly illustrates the value of the second-layer filter.
 These results confirm that ML-DSA authentication provides a
 cryptographic first line of defence, and the norm filter forms
@@ -560,70 +562,68 @@ an effective statistical second line.
   \centering
   \includegraphics[width=\textwidth]{fig3_byzantine.png}
   \caption{Byzantine attack evaluation over 20 rounds (node~4 as
-    rogue, seed~42).
+    rogue, 3 seeds). Shaded bands show $\pm1$ std across seeds.
     \textbf{Left (Part~A):} Tampered-signature attack.
-    ML-DSA rejects the rogue node in 100\% of rounds.
+    ML-DSA rejects the rogue node in 100\% of rounds (60/60).
     \textbf{Right (Part~B):} Gradient-poisoning attack (50$\times$
-    scale). Without defence, final AUC drops to 0.567. With the
+    scale). Without defence, final AUC is $0.619 \pm 0.114$. With the
     gradient-norm filter, the rogue is rejected in 100\% of rounds
-    and AUC recovers to 0.801 (+0.235 delta).}
+    and AUC recovers to $0.865 \pm 0.006$ ($\Delta = +0.246$).}
   \label{fig:byzantine}
 \end{figure*}
 
 \subsection{Differential Privacy Tradeoff}
 
 Fig.~\ref{fig:dp} and Table~\ref{tab:dp} show the privacy-utility
-tradeoff across six epsilon values (30 rounds, seed~42, clip $S=0.1$,
-$\delta=10^{-5}$, $\text{lr}=0.01$).
+tradeoff across six epsilon values (30 rounds, 3 seeds, clip $S=0.1$,
+$\delta=10^{-5}$, homogeneous Pima federation).
 
-At $\varepsilon = \infty$ (no DP), the model reaches AUC~0.845.
-At $\varepsilon = 50$, the penalty is only $-1.3\%$ (AUC~0.834).
-At $\varepsilon = 10$, the penalty is $-4.4\%$ (AUC~0.808).
-Tighter budgets cause severe degradation: AUC~0.741 at $\varepsilon=5$
-and near-random performance at $\varepsilon \le 1$.
+At $\varepsilon = \infty$ (no DP), mean AUC is $0.753 \pm 0.051$.
+At $\varepsilon = 10$, AUC is $0.639 \pm 0.030$ ($-15\%$).
+At $\varepsilon = 50$, AUC is $0.693 \pm 0.069$ ($-8\%$).
+Tighter budgets cause both severe degradation and high variance:
+$0.642 \pm 0.040$ at $\varepsilon=5$ and $0.550 \pm 0.085$ at
+$\varepsilon = 1$.
 
-This steep degradation at small $\varepsilon$ is a known property
-of DP in small-model FL~\cite{geyer2017}: with only 1531 parameters,
-the Gaussian noise ($\sigma = 0.484$ at $\varepsilon=1$) overwhelms
-the gradient signal ($\|\Delta\|_2 \approx 0.07$).
-At $\varepsilon = 0.5$ ($\sigma = 0.969$), the noise-to-signal ratio
-exceeds 13$\times$, causing the sigmoid output to saturate and the
-model to produce non-discriminative outputs, yielding AUC~0.000.
-In this degenerate regime the model assigns lower predicted probability
-to positive-class inputs than to negative-class inputs---a complete
-inversion of the intended mapping---so our ROC integrator returns
-0.000 (a perfectly anti-correlated classifier).
+This degradation is a known property of DP in small-model
+FL~\cite{geyer2017}: with only 1531 parameters, the Gaussian noise
+($\sigma = 0.484$ at $\varepsilon=1$) overwhelms the gradient signal.
+Critically, at $\varepsilon \le 1$ the high variance ($\pm 0.085$ to
+$\pm 0.126$) means results become \emph{unpredictable}---some seeds
+converge, others do not---which is an even stronger argument against
+tight DP budgets than mean AUC alone.
 The practical recommendation is that \textbf{$\varepsilon \ge 10$
-provides meaningful privacy at acceptable utility cost} for this
-model class.
+provides both acceptable utility and reproducible convergence} for
+this model class.
 
 \begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig5_dp_tradeoff.png}
   \caption{Differential privacy tradeoff
-    (30 rounds, seed~42, clip $S=0.1$, $\delta=10^{-5}$).
-    \textbf{Left:} Convergence curves per $\varepsilon$ value.
-    $\varepsilon=50$ nearly matches the no-DP baseline (dashed).
-    \textbf{Right:} Final AUC at round~30 vs.\ privacy budget.
-    At $\varepsilon=10$, AUC penalty is only $-4.4\%$.
-    At $\varepsilon \le 1$, noise overwhelms the gradient signal.}
+    (30 rounds, 3 seeds, clip $S=0.1$, $\delta=10^{-5}$).
+    Shaded bands show $\pm1$ std across seeds.
+    \textbf{Left:} Mean convergence curves per $\varepsilon$.
+    \textbf{Right:} Final AUC (mean $\pm$ std) vs.\ privacy budget.
+    At $\varepsilon \ge 5$, AUC is $0.64$--$0.75$.
+    At $\varepsilon \le 1$, noise causes both degradation and high
+    variance, making convergence unpredictable.}
   \label{fig:dp}
 \end{figure*}
 
 \begin{table}[t]
-  \caption{Differential Privacy: Final AUC (Round 30) vs.\ $\varepsilon$}
+  \caption{Differential Privacy: Final AUC (Round 30, 3 Seeds) vs.\ $\varepsilon$}
   \label{tab:dp}
   \centering
   \begin{tabular}{ccc}
     \toprule
-    $\varepsilon$ & $\sigma$ & \textbf{AUC (Round 30)} \\
+    $\varepsilon$ & $\sigma$ & \textbf{AUC mean $\pm$ std} \\
     \midrule
-    0.5      & 0.969 & 0.000 \\
-    1.0      & 0.484 & 0.029 \\
-    5.0      & 0.097 & 0.741 \\
-    10.0     & 0.048 & 0.808 \\
-    50.0     & 0.010 & 0.834 \\
-    $\infty$ & 0     & 0.845 \\
+    0.5      & 0.969 & $0.418 \pm 0.126$ \\
+    1.0      & 0.484 & $0.550 \pm 0.085$ \\
+    5.0      & 0.097 & $0.642 \pm 0.040$ \\
+    10.0     & 0.048 & $0.639 \pm 0.030$ \\
+    50.0     & 0.010 & $0.693 \pm 0.069$ \\
+    $\infty$ & 0     & $0.753 \pm 0.051$ \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -703,8 +703,9 @@ transmitting 11$\times$ more cryptographic bytes per update.
 ML-DSA verification achieves 100\% detection on tampered-signature
 attacks, and the gradient-norm filter catches all tested scaled-gradient
 poisoning attempts (single rogue node, 50$\times$ scale, seed~42).
-The DP layer shows that $\varepsilon \ge 10$ costs under 5\% AUC
-for this model class.
+The DP layer (3 seeds) shows that $\varepsilon \ge 10$ gives stable
+convergence ($0.639 \pm 0.030$), while $\varepsilon \le 1$ yields
+both degradation and unpredictable variance for this model class.
 Scalability experiments confirm that round latency remains flat at
 63--65\,ms when the federation grows from 5 to 20 nodes, with PQC
 cryptographic overhead not compounding with federation size.
