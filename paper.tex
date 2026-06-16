@@ -497,6 +497,7 @@ in bytes, a modest cost for quantum-safe guarantees.
   \caption{NIST Security Level Comparison (12\,KB payload, 20 iter.)}
   \label{tab:seclevels}
   \centering
+  \resizebox{\columnwidth}{!}{%
   \begin{tabular}{lccc}
     \toprule
     \textbf{Metric} & \textbf{Level~1} & \textbf{Level~3} & \textbf{Level~5} \\
@@ -510,7 +511,7 @@ in bytes, a modest cost for quantum-safe guarantees.
     Signature (B)       & 2420 & 3309 & 4627 \\
     Crypto overhead (KB)& 4.4  & 6.2  & 8.6  \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}}
 \end{table}
 
 \begin{figure*}[t!]
@@ -646,7 +647,7 @@ run, a negligible cost for quantum-safe guarantees.
 To test how PQC-FL-Health scales beyond the five-hospital baseline,
 we extend the federation to 10 and 20 simulated nodes, repeating the
 mixed-dataset protocol over three seeds (50 rounds each).
-Table~\ref{fig:scalability} summarises final AUC and average round
+Fig.~\ref{fig:scalability} summarises final AUC and average round
 time for all three configurations.
 
 \textbf{PQC overhead does not compound with federation size.}
@@ -662,23 +663,20 @@ gradient average is invariant to the number of equal shards).
 The genuine scalability finding is the flat cryptographic overhead:
 quadrupling the federation produces no measurable latency penalty.
 
-\begin{table}[t]
-  \caption{PQC-FL-Health Scalability (50 Rounds, 3 Seeds)}
-  \label{fig:scalability}
+\begin{figure*}[!t]
   \centering
-  \begin{tabular}{ccc}
-    \toprule
-    \textbf{Nodes} & \textbf{Final AUC} & \textbf{Avg Round (ms)} \\
-    \midrule
-    5  & $0.862 \pm 0.010$ & $63.8 \pm 1.0$ \\
-    10 & $0.862 \pm 0.010$ & $63.0 \pm 0.2$ \\
-    20 & $0.862 \pm 0.010$ & $65.5 \pm 0.8$ \\
-    \bottomrule
-  \end{tabular}
-  \\[3pt]
-  {\footnotesize AUC invariant by FedAvg construction (proportional
-  partitioning); the key finding is flat PQC latency across all scales.}
-\end{table}
+  \includegraphics[width=\textwidth]{fig7_scalability.png}
+  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds,
+    ML-KEM-768 + ML-DSA-65).
+    \textbf{Left:} Final AUC vs.\ federation size.
+    AUC remains stable at $0.862 \pm 0.010$ across 5, 10, and 20
+    nodes; error bars show std across seeds.
+    \textbf{Right:} Average per-round latency.
+    Latency is flat at 63--65\,ms regardless of node count,
+    confirming that PQC overhead does not compound with federation
+    size.}
+  \label{fig:scalability}
+\end{figure*}
 
 %==================================================================
 \section{Conclusion}
