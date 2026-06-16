@@ -14,6 +14,8 @@
 
 \title{PQC-FL-Health: Post-Quantum Federated Learning\\
 for Privacy-Preserving Healthcare Analytics}
+\titlerunning{PQC-FL-Health: Post-Quantum Federated Learning}
+\authorrunning{Anonymous Author}
 
 \author{Anonymous Author}
 \institute{Anonymous Institution}
@@ -270,7 +272,7 @@ centre) has 73.2\% positive rate, a $9\times$ ratio.
 This is a methodologically clean cross-silo FL benchmark: all nodes
 share the same prediction task and label semantics.
 
-\textbf{Heterogeneous federation (primary evaluation).}
+\textbf{Heterogeneous federation (system validation).}
 Five simulated hospitals each specialise in a single disease domain:
 nodes~0--1 hold independent shards of the Pima Indians Diabetes
 dataset~\cite{smith1988} (8 features, $\sim$205 training samples each);
@@ -429,7 +431,7 @@ Both schemes reach identical model quality (AUC~0.837), confirming
 that replacing classical primitives with PQC does not affect
 convergence.
 
-PQC is \textbf{1.6$\times$ faster} per round (64\,ms vs.\ 101\,ms).
+PQC is \textbf{1.6$\times$ faster} per round (64\,ms vs.\ 103\,ms).
 This advantage comes primarily from decryption: ML-KEM-768
 decapsulation takes 1.41\,ms per round, while RSA-4096 decryption
 takes 33.44\,ms, a \textbf{24$\times$ speedup}.
@@ -450,7 +452,7 @@ Fig.~\ref{fig:latency} shows per-round latency traces across all
     \textbf{Metric} & \textbf{PQC} & \textbf{Classical} \\
     \midrule
     AUC                      & 0.837 & 0.837 \\
-    Avg round time (ms)      & 64    & 101   \\
+    Avg round time (ms)      & 64    & 103   \\
     Avg enc / node (ms)      & 0.57  & 0.29  \\
     Avg dec / round (ms)     & 1.41  & 33.44 \\
     Total bandwidth (30r)    & 3381\,KB & 2531\,KB \\
@@ -468,7 +470,7 @@ Fig.~\ref{fig:latency} shows per-round latency traces across all
     \textbf{Right:} Total round time (training + cryptography).
     PQC decryption (1.41\,ms) is 24$\times$ faster than RSA-4096
     (33.44\,ms), yielding a 1.6$\times$ end-to-end speedup
-    (64\,ms vs.\ 101\,ms).}
+    (64\,ms vs.\ 103\,ms).}
   \label{fig:latency}
 \end{figure}
 
@@ -584,6 +586,9 @@ Critically, at $\varepsilon \le 1$ the high variance ($\pm 0.085$ to
 $\pm 0.126$) means results become \emph{unpredictable}---some seeds
 converge, others do not---which is an even stronger argument against
 tight DP budgets than mean AUC alone.
+Note that $\varepsilon=5$ (0.642) scores marginally above
+$\varepsilon=10$ (0.639); this reversal is within cross-seed noise
+and does not alter the practical conclusion.
 The practical recommendation is that \textbf{$\varepsilon \ge 10$
 provides both acceptable utility and reproducible convergence} for
 this model class.
@@ -694,7 +699,7 @@ and run 1.6$\times$ faster end-to-end than RSA-4096, despite
 transmitting 11$\times$ more cryptographic bytes per update.
 ML-DSA verification achieves 100\% detection on tampered-signature
 attacks, and the gradient-norm filter catches all tested scaled-gradient
-poisoning attempts (single rogue node, 50$\times$ scale, seed~42).
+poisoning attempts (single rogue node, 50$\times$ scale, 3 seeds).
 The DP layer (3 seeds) shows that $\varepsilon \ge 10$ gives stable
 convergence ($0.639 \pm 0.030$), while $\varepsilon \le 1$ yields
 both degradation and unpredictable variance for this model class.
@@ -704,8 +709,9 @@ cryptographic overhead not compounding with federation size.
 
 Current limitations include the small model size (1531 parameters,
 which restricts viable DP budgets), single-CPU experiments without
-HSM acceleration, single-rogue-node Byzantine scenarios, and
-simulated rather than real network conditions.
+HSM acceleration, single-rogue-node Byzantine scenarios with a
+naive scaling attack (adaptive or colluding-rogue variants remain
+untested), and simulated rather than real network conditions.
 Future work should explore multi-task FL architectures (per-disease
 output heads) to eliminate gradient dilution while preserving
 variance reduction, and test larger models where tight DP budgets
@@ -717,6 +723,17 @@ upgrade.
 PQC-FL-Health shows that quantum-safe FL is practical today, with
 no accuracy cost and a latency advantage over the classical baseline
 it replaces.
+
+%==================================================================
+\section*{Ethical Considerations}
+All experiments use publicly available, fully de-identified benchmark
+datasets (Pima Indians Diabetes~\cite{smith1988}, Cleveland Heart
+Disease~\cite{detrano1989}, and WDBC Breast Cancer~\cite{street1993})
+that contain no personally identifiable information and were released
+for open research use.
+No human subjects were involved, no new data were collected, and no
+IRB approval was required.
+No real patient records were used at any stage of this work.
 
 %==================================================================
 \begin{thebibliography}{00}

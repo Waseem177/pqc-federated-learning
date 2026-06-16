@@ -438,7 +438,7 @@ Both schemes reach identical model quality (AUC~0.837), confirming
 that replacing classical primitives with PQC does not affect
 convergence.
 
-PQC is \textbf{1.6$\times$ faster} per round (64\,ms vs.\ 101\,ms).
+PQC is \textbf{1.6$\times$ faster} per round (64\,ms vs.\ 103\,ms).
 This advantage comes primarily from decryption: ML-KEM-768
 decapsulation takes 1.41\,ms per round, while RSA-4096 decryption
 takes 33.44\,ms, a \textbf{24$\times$ speedup}.
@@ -459,7 +459,7 @@ Fig.~\ref{fig:latency} shows per-round latency traces across all
     \textbf{Metric} & \textbf{PQC} & \textbf{Classical} \\
     \midrule
     AUC                      & 0.837 & 0.837 \\
-    Avg round time (ms)      & 64    & 101   \\
+    Avg round time (ms)      & 64    & 103   \\
     Avg enc / node (ms)      & 0.57  & 0.29  \\
     Avg dec / round (ms)     & 1.41  & 33.44 \\
     Total bandwidth (30r)    & 3381\,KB & 2531\,KB \\
@@ -477,7 +477,7 @@ Fig.~\ref{fig:latency} shows per-round latency traces across all
     \textbf{Right:} Total round time (training + cryptography).
     PQC decryption (1.41\,ms) is 24$\times$ faster than RSA-4096
     (33.44\,ms), yielding a 1.6$\times$ end-to-end speedup
-    (64\,ms vs.\ 101\,ms).}
+    (64\,ms vs.\ 103\,ms).}
   \label{fig:latency}
 \end{figure*}
 
