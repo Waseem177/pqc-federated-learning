@@ -35,8 +35,8 @@ DATASET     = "mixed"
 
 
 def run_one(n_nodes, seed, n_rounds=N_ROUNDS):
-    shards = load_and_partition(n_nodes=n_nodes, seed=seed,
-                                dataset=DATASET, verbose=False)
+    shards, _ = load_and_partition(n_nodes=n_nodes, seed=seed,
+                                   dataset=DATASET, verbose=False)
     np.random.seed(seed)
     X_te = np.concatenate([s[2] for s in shards])
     y_te = np.concatenate([s[3] for s in shards])

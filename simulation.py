@@ -23,7 +23,7 @@ def parse_args():
     p.add_argument("--mode",    choices=["pqc", "classical", "both"], default="pqc")
     p.add_argument("--lr",      type=float, default=1e-2)
     p.add_argument("--seed",    type=int,   default=42)
-    p.add_argument("--dataset", choices=["mixed", "pima"], default="mixed")
+    p.add_argument("--dataset", choices=["hetero", "mixed", "pima"], default="hetero")
     return p.parse_args()
 
 
@@ -35,7 +35,26 @@ def _bar(title, width=64):
     print(f"{'═'*width}")
 
 
-def run_one(mode, shards, n_rounds, lr, seed=42):
+def _per_dataset_auc(model, shards, labels):
+    """Compute AUC separately for each disease group when labels are available."""
+    if labels is None or all(l == "mixed" for l in labels):
+        return {}
+    groups = {}
+    for (_, _, Xte, yte), lab in zip(shards, labels):
+        key = "diabetes" if lab.startswith("diabetes") else lab
+        if key not in groups:
+            groups[key] = ([], [])
+        groups[key][0].append(Xte)
+        groups[key][1].append(yte)
+    out = {}
+    for key, (xs, ys) in groups.items():
+        X = np.concatenate(xs)
+        y = np.concatenate(ys)
+        out[f"{key}_auc"] = model.evaluate(X, y)["auc"]
+    return out
+
+
+def run_one(mode, shards, n_rounds, lr, seed=42, shard_labels=None):
     n_nodes = len(shards)
 
     # seed numpy global RNG so training shuffles are reproducible per seed
@@ -104,6 +123,7 @@ def run_one(mode, shards, n_rounds, lr, seed=42):
         gm = FeedForwardNN(input_dim=X_te_global.shape[1])
         gm.set_weights(srv.global_weights)
         gmet = gm.evaluate(X_te_global, y_te_global)
+        per_ds = _per_dataset_auc(gm, shards, shard_labels)
 
         print(f"\n  ── Round {rnd} {'─'*44}")
         print(
@@ -114,6 +134,9 @@ def run_one(mode, shards, n_rounds, lr, seed=42):
             f"acc={gmet['accuracy']*100:.1f}%  "
             f"loss={gmet['loss']:.4f}"
         )
+        if per_ds:
+            print("  Per-disease: " +
+                  "  ".join(f"{k}={v:.3f}" for k, v in per_ds.items()))
         print(
             f"  Accepted {len(agg['accepted'])}/{n_nodes}"
             + (f"  | REJECTED {agg['rejected']}" if agg["rejected"] else "")
@@ -133,6 +156,7 @@ def run_one(mode, shards, n_rounds, lr, seed=42):
             round_ms=round_ms,         net_kb=net_kb,
             overhead_b=overhead,       frob=frob,
             accepted=len(agg["accepted"]), rejected=len(agg["rejected"]),
+            **per_ds,
         ))
 
     return round_log
@@ -191,11 +215,11 @@ def main():
     _bar(f"PQC-FL Healthcare  |  {args.mode.upper()}  |  {n_nodes} nodes  |  {n_rounds}r  |  lr={lr}")
 
     print(f"\n[Setup] Loading dataset (dataset={args.dataset})...")
-    shards = load_and_partition(n_nodes=n_nodes, verbose=True, dataset=args.dataset)
+    shards, shard_labels = load_and_partition(n_nodes=n_nodes, verbose=True, dataset=args.dataset)
 
     all_results = {}
     for mode in modes:
-        round_log = run_one(mode, shards, n_rounds, lr, seed=args.seed)
+        round_log = run_one(mode, shards, n_rounds, lr, seed=args.seed, shard_labels=shard_labels)
         all_results[mode] = round_log
 
     summaries = [summarise(m, all_results[m]) for m in modes]

@@ -20,11 +20,12 @@ NODES  = 5
 MODE   = "pqc"
 LR     = 0.01
 
-METRICS = ["auc", "sensitivity", "specificity", "f1", "accuracy", "loss"]
-TIMING  = ["avg_enc_ms", "dec_ms", "round_ms"]
+METRICS     = ["auc", "sensitivity", "specificity", "f1", "accuracy", "loss"]
+DS_METRICS  = ["diabetes_auc", "heart_auc", "cancer_auc"]   # hetero mode only
+TIMING      = ["avg_enc_ms", "dec_ms", "round_ms"]
 
 
-def run_seed(seed, dataset="mixed"):
+def run_seed(seed, dataset="hetero"):
     print(f"\n{'═'*64}")
     print(f"  Seed {seed}  ({SEEDS.index(seed)+1}/{len(SEEDS)})"
           f"  — {ROUNDS} rounds, {NODES} nodes, lr={LR}, dataset={dataset}")
@@ -61,18 +62,22 @@ def compute_stats(all_seed_rounds):
     n_rounds = len(all_seed_rounds[0])
 
     by_round = {}
+    # determine which per-dataset metrics are present in these results
+    active_ds_metrics = [m for m in DS_METRICS
+                         if m in all_seed_rounds[0][0]]
+
     for rnd_idx in range(n_rounds):
         rnd_num = rnd_idx + 1
         by_round[rnd_num] = {}
-        for m in METRICS + TIMING:
+        for m in METRICS + TIMING + active_ds_metrics:
             vals = [seed_rounds[rnd_idx][m] for seed_rounds in all_seed_rounds]
             by_round[rnd_num][m] = {
                 "mean": float(np.mean(vals)),
                 "std":  float(np.std(vals)),
             }
 
-    # final-round quality metrics
-    final = {m: by_round[n_rounds][m] for m in METRICS}
+    # final-round quality metrics (global + per-dataset if available)
+    final = {m: by_round[n_rounds][m] for m in METRICS + active_ds_metrics}
 
     # timing: averaged over all rounds then over seeds
     for t in TIMING:
@@ -90,18 +95,22 @@ def compute_stats(all_seed_rounds):
 
 def print_summary(final):
     labels = {
-        "auc":         "AUC",
-        "sensitivity": "Sensitivity (TPR)",
-        "specificity": "Specificity (TNR)",
-        "f1":          "F1 Score",
-        "accuracy":    "Accuracy",
-        "loss":        "Loss",
-        "avg_enc_ms":  "Avg enc / node (ms)",
-        "dec_ms":      "Avg dec / round (ms)",
-        "round_ms":    "Avg round time (ms)",
+        "auc":           "AUC (global)",
+        "diabetes_auc":  "AUC — Diabetes",
+        "heart_auc":     "AUC — Heart Disease",
+        "cancer_auc":    "AUC — Breast Cancer",
+        "sensitivity":   "Sensitivity (TPR)",
+        "specificity":   "Specificity (TNR)",
+        "f1":            "F1 Score",
+        "accuracy":      "Accuracy",
+        "loss":          "Loss",
+        "avg_enc_ms":    "Avg enc / node (ms)",
+        "dec_ms":        "Avg dec / round (ms)",
+        "round_ms":      "Avg round time (ms)",
     }
     fmt = {
-        "auc": "{:.4f}", "sensitivity": "{:.4f}", "specificity": "{:.4f}",
+        "auc": "{:.4f}", "diabetes_auc": "{:.4f}", "heart_auc": "{:.4f}",
+        "cancer_auc": "{:.4f}", "sensitivity": "{:.4f}", "specificity": "{:.4f}",
         "f1": "{:.4f}", "accuracy": "{:.2%}", "loss": "{:.4f}",
         "avg_enc_ms": "{:.3f}", "dec_ms": "{:.3f}", "round_ms": "{:.1f}",
     }
@@ -121,7 +130,7 @@ def print_summary(final):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--dataset", choices=["mixed", "pima"], default="mixed")
+    p.add_argument("--dataset", choices=["hetero", "mixed", "pima"], default="hetero")
     args = p.parse_args()
 
     all_paths = []
@@ -136,7 +145,7 @@ def main():
     by_round, final = compute_stats(all_seed_rounds)
     print_summary(final)
 
-    suffix = f"_{args.dataset}" if args.dataset != "mixed" else ""
+    suffix = f"_{args.dataset}" if args.dataset != "hetero" else ""
     out_path = f"results_multiseed{suffix}.json"
 
     output = {

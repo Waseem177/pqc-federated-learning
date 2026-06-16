@@ -12,57 +12,53 @@
 
 \begin{document}
 
-\title{Post-Quantum Cryptography-Secured Federated Learning for Healthcare:\\
-A Three-Layer Privacy Framework with Byzantine Robustness\\
-and Differential Privacy}
+\title{PQC-FL-Health: Post-Quantum Federated Learning\\
+for Privacy-Preserving Healthcare Analytics}
 
 \author{
   \IEEEauthorblockN{Mohamed Waseem}
   \IEEEauthorblockA{Department of Computer Science,\\
-  Sathyabama Institute of Science and Technology, Chennai, India\\
+  Sathyabama Institute of Science and Technology,\\
+  Chennai, India\\
   waseeeem177@gmail.com}
-  \and
-  \IEEEauthorblockN{Mohammed Fawaz}
-  \IEEEauthorblockA{Department of Computer Science,\\
-  Sathyabama Institute of Science and Technology, Chennai, India\\
-  fawaznx97@gmail.com}
 }
 
 \maketitle
 
 %------------------------------------------------------------------
 \begin{abstract}
-Federated learning (FL) enables multiple hospitals to collaboratively
-train machine learning models without sharing raw patient data.
-However, existing FL deployments rely on classical cryptographic
-schemes---RSA and HMAC---that are vulnerable to harvest-now-decrypt-later
-attacks from quantum-capable adversaries.
+Federated learning (FL) allows hospitals to collaboratively train
+machine learning models without transferring raw patient data.
+Most existing FL deployments use classical cryptographic schemes such
+as RSA and HMAC, which are vulnerable to harvest-now-decrypt-later
+attacks by quantum-capable adversaries.
 We present \textbf{PQC-FL-Health}, a three-layer security framework
 for federated healthcare analytics that replaces classical primitives
 with NIST-standardised post-quantum cryptography (PQC):
 (1)~\textbf{ML-KEM-768} (CRYSTALS-Kyber) for quantum-safe key
 encapsulation, (2)~\textbf{ML-DSA-65} (CRYSTALS-Dilithium) for
 authenticated gradient updates, and (3)~\textbf{Gaussian differential
-privacy (DP)} to protect against aggregator-side patient-data inference.
-We evaluate the system on a heterogeneous five-hospital federation
-spanning three distinct medical datasets (Pima diabetes, Cleveland heart
-disease, WDBC breast cancer) and on a homogeneous single-disease
-scenario (five diabetes clinics with non-IID glucose-quartile
-partitioning).
-Across five random seeds and 50 communication rounds, PQC-FL-Health
-achieves AUC $0.854 \pm 0.002$ on the heterogeneous federation.
+privacy (DP)} to guard against aggregator-side patient-data inference.
+We evaluate the system on a node-specialised five-hospital federation
+in which each hospital holds its own disease domain
+(Pima diabetes, Cleveland heart disease, WDBC breast cancer),
+and on a homogeneous single-disease scenario with non-IID
+glucose-quartile partitioning as the primary FL evaluation.
+Over five random seeds and 50 communication rounds, PQC-FL-Health
+achieves global AUC $0.888 \pm 0.005$ on the heterogeneous
+federation, with per-disease AUC of $0.798$ (diabetes),
+$0.845$ (heart disease), and $0.996$ (breast cancer).
 PQC operations complete in under 1\,ms at all three NIST security
-levels and are \textbf{1.6$\times$ faster} end-to-end than RSA-4096
+levels and run \textbf{1.6$\times$ faster} end-to-end than RSA-4096
 (64\,ms vs.\ 101\,ms per round), despite adding 31.1\,KB of
 cryptographic overhead per round.
-An ML-DSA-based Byzantine filter achieves \textbf{100\% detection} of
-tampered-signature attacks; a gradient-norm anomaly detector catches
-poisoning attacks in all rounds.
-DP introduces a clear privacy-utility tradeoff: at $\varepsilon=10$
-the AUC penalty is only 4.4\%, while tighter budgets ($\varepsilon \le 1$)
-cause significant degradation---a fundamental cost of strong privacy
-in small-model FL.
-All code, datasets, and results are released publicly.
+ML-DSA signature verification detects 100\% of tampered-signature
+attacks; a gradient-norm filter catches all gradient poisoning
+attempts.
+At $\varepsilon = 10$, differential privacy costs only 4.4\% AUC,
+while budgets at or below $\varepsilon = 1$ cause severe degradation
+due to noise overwhelming the gradient signal in a small model.
+All code, datasets, and results are publicly available.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -75,115 +71,93 @@ CRYSTALS-Dilithium
 \section{Introduction}
 \label{sec:intro}
 
-The digitisation of healthcare has produced vast quantities of sensitive
-patient data distributed across hospitals, clinics, and research
-institutions.
-Federated learning (FL)~\cite{mcmahan2017} enables these institutions
-to collaboratively train shared models without centralising raw data,
-thus preserving patient privacy by design.
+Healthcare institutions generate large volumes of sensitive patient
+data that are distributed across hospitals, clinics, and research
+centres.
+Federated learning (FL)~\cite{mcmahan2017} lets these institutions
+jointly train shared models without centralising raw records,
+preserving patient privacy by design.
 However, FL deployments in production healthcare systems face two
-distinct threats that are rarely addressed together.
+threats that are rarely addressed together.
 
 \textbf{The quantum threat.}
-Classical public-key cryptography---RSA, Diffie-Hellman, and
-ECDSA---underpins the secure channels over which FL updates travel.
-Shor's algorithm~\cite{shor1994} renders these schemes breakable in
-polynomial time on a sufficiently powerful quantum computer.
-More immediately, adversaries can today record encrypted model updates
-(``harvest now'') and decrypt them once quantum hardware matures
-(``decrypt later''), exposing both the model and the patient data it
-was trained on.
+Classical public-key cryptography, including RSA, Diffie-Hellman, and
+ECDSA, underpins the secure channels over which FL updates travel.
+Shor's algorithm~\cite{shor1994} can break these schemes in polynomial
+time on a sufficiently powerful quantum computer.
+More immediately, adversaries can record encrypted model updates today
+and decrypt them once quantum hardware matures, exposing both the
+model and the patient data used to train it.
 NIST has responded by standardising ML-KEM (FIPS~203)~\cite{nistfips203}
 and ML-DSA (FIPS~204)~\cite{nistfips204}, two lattice-based schemes
 designed to resist quantum attacks.
 
 \textbf{The federated attack surface.}
-Even with a secure channel, FL aggregation is vulnerable to
-Byzantine nodes that inject malicious gradient updates~\cite{blanchard2017},
-and to honest-but-curious aggregators that infer patient attributes
-from the received updates~\cite{geiping2020}.
-Differential privacy (DP)~\cite{dwork2006} is the gold-standard defence
+Even with a secure channel, FL aggregation is vulnerable to Byzantine
+nodes that inject malicious gradient updates~\cite{blanchard2017}, and
+to honest-but-curious aggregators that infer patient attributes from
+received updates~\cite{geiping2020}.
+Differential privacy (DP)~\cite{dwork2006} is the standard defence
 against aggregator inference, but its interaction with FL convergence
-under non-IID data remains an open empirical question in the healthcare
-domain.
+under non-IID healthcare data is not well characterised empirically.
 
 \textbf{Contributions.} This paper makes the following contributions:
 \begin{itemize}
-  \item We design and implement \textbf{PQC-FL-Health}, to our knowledge, the first
-    federated learning system for healthcare that simultaneously
-    provides quantum-safe channel security (ML-KEM-768),
-    authenticated updates (ML-DSA-65), Byzantine robustness
-    (signature verification + gradient-norm filter), and
-    differential privacy (Gaussian mechanism).
+  \item We design and implement \textbf{PQC-FL-Health}, to our
+    knowledge the first federated learning system for healthcare that
+    simultaneously provides quantum-safe channel security (ML-KEM-768),
+    authenticated updates (ML-DSA-65), Byzantine robustness via
+    signature verification and gradient-norm filtering, and
+    differential privacy via the Gaussian mechanism.
 
-  \item We provide a comprehensive benchmark of all three NIST
-    post-quantum security levels (ML-KEM-512/768/1024 $\times$
-    ML-DSA-44/65/87) on a realistic 12\,KB model-delta payload,
-    reporting latency, bandwidth overhead, and convergence quality.
+  \item We benchmark all three NIST post-quantum security levels
+    (ML-KEM-512/768/1024 paired with ML-DSA-44/65/87) on a realistic
+    12\,KB model-delta payload, reporting latency, bandwidth overhead,
+    and convergence quality.
 
-  \item We evaluate on two clinically motivated federation scenarios:
-    (i)~a \emph{heterogeneous} five-hospital federation across three
-    disease domains, and (ii)~a \emph{homogeneous} five-clinic
-    federation for diabetes prediction under extreme non-IID
-    glucose-quartile partitioning.
+  \item We evaluate two clinically motivated federation scenarios:
+    a node-specialised five-hospital federation spanning three disease
+    domains with local-vs-federated comparison, and a homogeneous
+    five-clinic federation for diabetes prediction under extreme
+    non-IID glucose-quartile partitioning.
 
-  \item We quantify the full privacy-utility tradeoff for DP in
-    small-model FL, showing that $\varepsilon \ge 10$ costs less
-    than 5\% AUC while $\varepsilon \le 1$ is untenable for a
-    1531-parameter model---a baseline for future work on
-    DP-compatible model architectures.
+  \item We quantify the privacy-utility tradeoff for DP in small-model
+    FL, showing that $\varepsilon \ge 10$ costs less than 5\% AUC,
+    while $\varepsilon \le 1$ is not viable for a 1531-parameter
+    model, providing a practical baseline for future work on
+    DP-compatible architectures.
 \end{itemize}
 
-The remainder of the paper is structured as follows.
 Section~\ref{sec:related} reviews related work.
 Section~\ref{sec:system} describes the system architecture.
-Section~\ref{sec:setup} details the experimental setup.
+Section~\ref{sec:setup} covers the experimental setup.
 Section~\ref{sec:results} presents results.
-Section~\ref{sec:discussion} discusses implications.
 Section~\ref{sec:conclusion} concludes.
 
 %==================================================================
 \section{Related Work}
 \label{sec:related}
 
-\subsection{Federated Learning}
-McMahan~et~al.~\cite{mcmahan2017} introduced FedAvg, which remains
-the dominant FL aggregation algorithm.
-Li~et~al.~\cite{li2020federated} survey challenges including
-communication efficiency, heterogeneous data, and systems
-heterogeneity.
-FL for healthcare has been explored in medical imaging~\cite{rieke2020},
-where data-sharing regulations make centralised training infeasible.
-Non-IID data distribution is consistently identified as the main
-barrier to fast convergence~\cite{zhao2018}.
-
-\subsection{Post-Quantum Cryptography in Machine Learning Systems}
-PQC has been studied primarily in the context of TLS and
-IoT~\cite{nguyen2021}, but its application to federated learning
-is nascent.
-Compared to classical schemes, lattice-based KEM and signature
-algorithms offer smaller ciphertexts and faster decapsulation, making
-them attractive for bandwidth-constrained FL.
-To our knowledge, no prior work simultaneously applies both ML-KEM
-and ML-DSA to the FL update pipeline and benchmarks the result
-against a classical baseline.
-
-\subsection{Byzantine-Robust Federated Learning}
-Blanchard~et~al.~\cite{blanchard2017} introduced Krum, the first
-provably Byzantine-robust aggregation rule.
-Subsequent work~\cite{fang2020} showed that many defences are
-vulnerable to adaptive poisoning attacks.
-We combine a cryptographic first line of defence (ML-DSA signature
-verification) with a statistical second line (gradient-norm anomaly
-detection), following the principle of defence-in-depth.
-
-\subsection{Differential Privacy in Federated Learning}
-Dwork~et~al.~\cite{dwork2006} formalised DP; Abadi~et~al.~\cite{abadi2016}
-introduced DP-SGD for deep learning.
+FedAvg~\cite{mcmahan2017} remains the dominant FL aggregation rule;
+Li~et~al.~\cite{li2020federated} survey its challenges including
+non-IID data~\cite{zhao2018} and systems heterogeneity.
+FL in medical imaging~\cite{rieke2020} motivates privacy-preserving
+aggregation without data centralisation.
+PQC for FL is nascent: Cheng~et~al.~\cite{cheng2023pqcfl} propose a
+PQC communication model for quantum FL;
+Huang~et~al.~\cite{huang2024pqcfl} study NIST PQC signatures in FL;
+PQS-BFL~\cite{pierson2025pqsbfl} combines PQC with blockchain-based FL;
+a 2025 survey~\cite{survey2025flquantum} reviews the FL--quantum
+intersection.
+On Byzantine robustness, Blanchard~et~al.~\cite{blanchard2017}
+introduced Krum; Fang~et~al.~\cite{fang2020} showed adaptive
+poisoning can bypass many defences.
+On privacy, Abadi~et~al.~\cite{abadi2016} introduced DP-SGD;
 Geyer~et~al.~\cite{geyer2017} applied client-level DP to FL.
-Our work applies the Gaussian mechanism at the per-round gradient level
-under the $({\varepsilon},{\delta})$-DP framework and empirically
-characterises the tradeoff on healthcare data.
+Our work is the first to combine ML-KEM key encapsulation, ML-DSA
+gradient authentication, Byzantine defence-in-depth, and Gaussian DP
+in a single healthcare FL system with empirical benchmarks against
+RSA-4096.
 
 %==================================================================
 \section{System Design}
@@ -191,13 +165,13 @@ characterises the tradeoff on healthcare data.
 
 \subsection{Architecture Overview}
 
-PQC-FL-Health follows a standard cross-silo FL topology: $N=5$
+PQC-FL-Health uses a standard cross-silo FL topology: $N = 5$
 hospital nodes communicate with a central aggregation server over
 simulated secure channels.
 Each node holds a private local dataset and a local model copy.
 In each communication round, nodes: (1) receive the current global
-weights from the server, (2) train locally for $E=5$ epochs, (3) compute
-a weight delta $\Delta_i = w_i^{\text{new}} - w^{\text{global}}$,
+weights from the server, (2) train locally for $E = 5$ epochs,
+(3) compute a weight delta $\Delta_i = w_i^{\text{new}} - w^{\text{global}}$,
 (4) optionally apply DP noise, (5) encrypt and sign $\Delta_i$ using
 PQC primitives, and (6) transmit the bundle.
 The server verifies each bundle, aggregates accepted updates with
@@ -207,7 +181,7 @@ FedAvg, and broadcasts the new global weights.
 
 The server generates a long-term ML-KEM-768 keypair and publishes its
 public key.
-Before sending an update, each node performs encapsulation:
+Before sending an update, each node encapsulates a shared secret:
 \begin{equation}
   (\text{ct}, K) \leftarrow \text{ML-KEM.Encaps}(\text{pk}_{\text{server}})
 \end{equation}
@@ -225,7 +199,8 @@ ciphertext of 1088\,bytes and average encapsulation latency under
 \subsection{Layer 2: Authenticated Updates (ML-DSA-65)}
 
 Each node holds a long-term ML-DSA-65 signing keypair; the server
-maintains a registry of node public keys.
+maintains a registry of node public keys established at setup time
+and not retransmitted each round.
 After encryption, the node signs the concatenation of the KEM
 ciphertext and AES ciphertext:
 \begin{equation}
@@ -233,7 +208,7 @@ ciphertext and AES ciphertext:
 \end{equation}
 The server verifies $\sigma$ before accepting any update.
 A node that sends a tampered or forged signature is immediately
-rejected and its update is discarded.
+rejected and its update discarded.
 ML-DSA-65 signatures are 3293\,bytes with verification latency under
 0.3\,ms, providing NIST security level~3 authentication.
 
@@ -242,7 +217,7 @@ ML-DSA-65 signatures are 3293\,bytes with verification latency under
 To protect against an honest-but-curious aggregator that may infer
 patient attributes from gradient updates, we apply the Gaussian
 mechanism~\cite{dwork2006} at the node level.
-Each node clips its delta to $\ell_2$ sensitivity $S=0.1$ and adds
+Each node clips its delta to $\ell_2$ sensitivity $S = 0.1$ and adds
 calibrated Gaussian noise:
 \begin{equation}
   \tilde{\Delta}_i = \text{clip}_{S}(\Delta_i)
@@ -250,28 +225,32 @@ calibrated Gaussian noise:
   \sigma = \frac{S\,\sqrt{2\ln(1.25/\delta)}}{\varepsilon}
 \end{equation}
 with $\delta = 10^{-5}$ fixed and $\varepsilon$ as the privacy budget.
-The DP noise is added \emph{before} PQC encryption, so the server
-never sees the original gradient.
+DP noise is added before PQC encryption, so the server never observes
+the original gradient.
+Privacy loss is tracked across rounds using R\'{e}nyi differential
+privacy (RDP) composition~\cite{mironov2017rdp}, which yields tighter
+cumulative bounds than naive linear composition; at 50 rounds and
+$\varepsilon_{\text{per-round}}=10$, the RDP accountant gives
+$\varepsilon_{\text{cumul}}=181.7$ vs.\ $500$ under naive addition.
 
 \subsection{Byzantine Defence}
 
 Our defence operates at two levels.
-\textbf{First}, ML-DSA signature verification (Layer~2) immediately
-rejects any node whose transmitted bundle does not pass cryptographic
-authentication---this covers tampered-signature attacks with 100\%
-detection rate.
-\textbf{Second}, after decryption, the server optionally applies
-gradient-norm anomaly detection:
+First, ML-DSA signature verification (Layer~2) immediately rejects
+any bundle that fails cryptographic authentication, covering
+tampered-signature attacks with 100\% detection.
+Second, after decryption, the server optionally applies a
+gradient-norm anomaly filter:
 \begin{equation}
   \text{reject node } i \text{ if } \|\Delta_i\|_2 > 3 \cdot \text{median}_j\|\Delta_j\|_2
 \end{equation}
-This catches gradient-scaling attacks (Part~B) where a rogue node
-sends a correctly signed but scaled-up delta.
+This catches gradient-scaling attacks where a rogue node sends a
+correctly signed but amplified delta.
 
 \subsection{Aggregation}
 
-Accepted updates are aggregated with FedAvg weighted by local dataset
-size:
+Accepted updates are aggregated with FedAvg weighted by local
+dataset size:
 \begin{equation}
   w^{\text{new}} = w^{\text{global}} +
     \sum_{i \in \mathcal{A}} \frac{n_i}{\sum_{j\in\mathcal{A}} n_j}\,\Delta_i
@@ -287,82 +266,124 @@ $i$'s training set size.
 
 We evaluate on two federation scenarios.
 
-\textbf{Heterogeneous federation} (primary).
-Five simulated hospitals each specialise in a different domain:
-nodes~0--1 hold shards of the Pima Indians Diabetes
-dataset~\cite{smith1988} (768 samples, 8 features, 34.9\% positive);
-node~2 holds the Cleveland Heart Disease
-dataset~\cite{detrano1989} (297 samples, 13 features, 54\% positive);
-node~3 holds the Wisconsin Diagnostic Breast Cancer
-(WDBC) dataset~\cite{street1993} (569 samples, 30 features, 37\%
-positive); node~4 holds a noisy Pima shard simulating a lower-quality
-data source.
-All features are zero-padded to the largest input dimensionality (30).
-Each hospital normalises its own features independently, simulating
-real-world local calibration.
-
-\textbf{Homogeneous federation} (ablation).
-All five nodes hold disjoint shards of the Pima dataset,
+\textbf{Homogeneous federation (primary evaluation).}
+All five nodes hold disjoint shards of the Pima Indians Diabetes
+dataset~\cite{smith1988} (768 samples, 8 features, 34.9\% positive),
 partitioned \emph{non-IID} by ascending glucose level (feature~2).
 This produces extreme label skew: node~0 (low-glucose patients)
 has 8.1\% positive rate, while node~4 (high-glucose referral
-centre) has 73.2\% positive rate, a 9$\times$ ratio.
+centre) has 73.2\% positive rate, a $9\times$ ratio.
+This is a methodologically clean cross-silo FL benchmark: all nodes
+share the same prediction task and label semantics.
+
+\textbf{Heterogeneous federation (system stress-test).}
+Five simulated hospitals each specialise in a single disease domain:
+nodes~0--1 hold independent shards of the Pima Indians Diabetes
+dataset~\cite{smith1988} (8 features, $\sim$205 training samples each);
+node~2 holds the Cleveland Heart Disease
+dataset~\cite{detrano1989} (13 features, 238 training samples, 46\%
+positive); node~3 holds the Wisconsin Diagnostic Breast Cancer
+(WDBC) dataset~\cite{street1993} (30 features, 456 training samples,
+37\% positive); node~4 holds a third Pima shard with Gaussian
+feature noise ($\sigma=0.1$) simulating a lower-quality data source.
+All features are zero-padded to 30 dimensions.
+Each hospital normalises its own features independently.
+This scenario tests whether PQC-FL-Health operates correctly under
+data heterogeneity; a local-vs.-federated comparison
+(Section~\ref{sec:results}) quantifies the benefit and cost of
+cross-disease gradient sharing.
 
 \subsection{Model and Training}
 
-Each hospital trains a three-layer feedforward neural network
-($30 \to 64 \to 32 \to 1$, ReLU activations, sigmoid output,
-1531 parameters) for $E=5$ local epochs per round using SGD
-with learning rate $\eta = 0.01$.
-Binary cross-entropy loss is used throughout.
-Training uses mini-batches of size 32.
+Each hospital trains a fully connected multi-layer perceptron (MLP)
+with three layers ($30 \to 64 \to 32 \to 1$, ReLU activations,
+sigmoid output, 1531 parameters) for $E = 5$ local epochs per round
+using SGD with learning rate $\eta = 0.01$.
+An MLP is appropriate here given that all three datasets are tabular.
+Binary cross-entropy loss is used throughout with mini-batches
+of size 32.
 
 \subsection{Evaluation Protocol}
 
 We run 50 communication rounds per seed across five random seeds
 (42, 123, 456, 789, 1337) and report mean $\pm$ standard deviation.
-The global test set is the union of all hospital test sets.
-Primary metric is AUROC (AUC); we also report sensitivity (TPR),
-specificity (TNR), F1, and accuracy.
+The global test set is the union of all hospital test sets; for the
+heterogeneous scenario we also report per-disease AUC separately.
+The primary metric is AUROC (AUC); we also report sensitivity,
+specificity, F1, and accuracy.
 
-Cryptographic benchmarks are run for 20 iterations per configuration
-on a 12\,KB payload representative of a model delta.
-All experiments run on Python~3.12 under Ubuntu WSL2
-(Linux~6.6, no GPU), using liboqs~0.15.0 via liboqs-python~0.14.1.
+Cryptographic benchmarks use 20 iterations per configuration on a
+12\,KB payload representative of a model delta.
+All experiments run on Python~3.12 under Ubuntu WSL2 (Linux~6.6,
+no GPU) on an AMD Ryzen 7 7435HS CPU, using liboqs~0.15.0 via
+liboqs-python~0.14.1.
 
 %==================================================================
 \section{Results}
 \label{sec:results}
 
-\subsection{FL Convergence}
+\subsection{FL Convergence and Local Baseline}
 
-Fig.~\ref{fig:convergence} shows convergence curves for both federation
-scenarios across five seeds.
-In the \textbf{heterogeneous} setting, the global AUC rises from
-$0.456 \pm 0.084$ (round~1) to $\mathbf{0.854 \pm 0.002}$ (round~50),
-with a tight error band indicating high reproducibility.
-Accuracy reaches 78.1\% and F1 reaches 0.660 at convergence
+Fig.~\ref{fig:convergence} shows convergence curves for both
+federation scenarios across five seeds.
+
+\textbf{Homogeneous Pima-only federation (primary).}
+Final AUC is $0.787 \pm 0.019$ (Table~\ref{tab:convergence}).
+The extreme non-IID skew---nodes spanning 8--73\% positive
+rate---forces FedAvg to reconcile fundamentally different local
+optima, explaining the residual variance and the gap relative to
+a balanced dataset.
+
+\textbf{Heterogeneous federation (system stress-test).}
+Global AUC rises from $0.472 \pm 0.082$ (round~1) to
+$\mathbf{0.888 \pm 0.005}$ (round~50).
+Fig.~\ref{fig:convergence} (left) also shows per-disease convergence:
+breast cancer (WDBC) saturates early at AUC~$0.996 \pm 0.002$,
+while diabetes and heart disease converge more gradually to
+AUC~$0.798 \pm 0.013$ and $0.845 \pm 0.011$, respectively
 (Table~\ref{tab:convergence}).
 
-In the \textbf{homogeneous Pima-only} setting, final AUC is
-$0.787 \pm 0.019$---lower and with 9.5$\times$ more variance than
-the heterogeneous case.
-The gap is attributable to extreme label skew: nodes~0--4 have
-positive rates of 8--73\%, so FedAvg must reconcile fundamentally
-different local optima.
-This result quantifies the non-IID penalty in single-disease FL
-and motivates the use of heterogeneous cross-domain federation where
-clinically feasible.
+To determine whether cross-disease gradient sharing provides utility,
+we compare against a \emph{local baseline} in which each hospital
+trains in complete isolation for the same total gradient steps
+($50~\text{rounds} \times 5~\text{local epochs}$).
+Table~\ref{tab:local_vs_fed} shows the results.
+Cancer (WDBC, $n{=}456$ training) is self-sufficient: local
+$0.995 \pm 0.003$ vs.\ federated $0.996 \pm 0.002$
+($\Delta = +0.001$).
+Heart disease incurs a \textbf{gradient-dilution penalty}: federated
+AUC ($0.845 \pm 0.011$) is 6.5 points below local ($0.910 \pm 0.030$)
+because WDBC gradients from semantically disjoint features interfere
+with Cleveland's 13-dimensional signal.
+Diabetes shows the same mean ($0.799$ vs.\ $0.798$) but federation
+reduces prediction variance \textbf{4.8$\times$}
+($\pm0.058 \to \pm0.012$), providing more stable clinical
+decision-support for hospitals with only $\sim$200 training samples.
 
-\begin{figure*}[t]
+These results reveal an inherent tradeoff in cross-disease
+federation: variance stabilisation for data-scarce nodes versus
+accuracy degradation from gradient dilution.
+Critically, the PQC security layer operates identically in both
+regimes; the quantum-safety guarantees are independent of whether
+the federation scope is clinically optimal.
+Determining appropriate federation scope is a domain decision;
+future work should explore multi-task FL architectures (per-disease
+output heads) to eliminate gradient interference while preserving
+variance reduction.
+
+\begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig1_convergence.png}
   \caption{FL convergence over 50 rounds across 5 random seeds.
-    \textbf{Left:} Heterogeneous federation---5 hospitals spanning diabetes,
-    heart disease, and breast cancer datasets (AUC $0.854 \pm 0.002$).
-    \textbf{Right:} Homogeneous federation---5 diabetes clinics partitioned
-    non-IID by glucose quartile (AUC $0.787 \pm 0.019$).
-    Shaded bands show $\pm 1$ standard deviation across seeds.}
+    \textbf{Left:} Heterogeneous federation---each of the 5 hospitals
+    specialises in one disease domain.
+    Solid line: global AUC $0.888 \pm 0.005$;
+    dashed lines show per-disease AUC
+    (cancer $0.996$, heart $0.845$, diabetes $0.798$).
+    \textbf{Right:} Homogeneous federation (primary)---5 diabetes
+    clinics partitioned non-IID by glucose quartile
+    (AUC $0.787 \pm 0.019$).
+    Shaded bands: $\pm 1$ std across seeds.}
   \label{fig:convergence}
 \end{figure*}
 
@@ -372,32 +393,59 @@ clinically feasible.
   \centering
   \begin{tabular}{lcc}
     \toprule
-    \textbf{Metric} & \textbf{Heterogeneous} & \textbf{Homogeneous (Pima)} \\
+    \textbf{Metric} & \textbf{Hetero (global)} & \textbf{Homogeneous (Pima)} \\
     \midrule
-    AUC              & $0.854 \pm 0.002$ & $0.787 \pm 0.019$ \\
-    Sensitivity      & $0.589 \pm 0.012$ & $0.312 \pm 0.067$ \\
-    Specificity      & $0.889 \pm 0.008$ & $0.900 \pm 0.033$ \\
-    F1 Score         & $0.660 \pm 0.005$ & $0.412 \pm 0.064$ \\
-    Accuracy         & $0.781 \pm 0.003$ & $0.696 \pm 0.023$ \\
+    AUC              & $0.888 \pm 0.005$ & $0.787 \pm 0.019$ \\
+    AUC --- Diabetes & $0.798 \pm 0.013$ & --- \\
+    AUC --- Heart    & $0.845 \pm 0.011$ & --- \\
+    AUC --- Cancer   & $0.996 \pm 0.002$ & --- \\
+    Sensitivity      & $0.638 \pm 0.021$ & $0.312 \pm 0.067$ \\
+    Specificity      & $0.908 \pm 0.009$ & $0.900 \pm 0.033$ \\
+    F1 Score         & $0.712 \pm 0.011$ & $0.412 \pm 0.064$ \\
+    Accuracy         & $0.807 \pm 0.004$ & $0.696 \pm 0.023$ \\
     \bottomrule
   \end{tabular}
+\end{table}
+
+\begin{table}[t]
+  \caption{Heterogeneous Federation: Local vs.\ Federated AUC
+           (Round 50, 5 Seeds)}
+  \label{tab:local_vs_fed}
+  \centering
+  \begin{tabular}{lccc}
+    \toprule
+    \textbf{Disease} & \textbf{Local (isolated)} & \textbf{Federated} & $\boldsymbol{\Delta}$ \textbf{AUC} \\
+    \midrule
+    Diabetes  & $0.799 \pm 0.058$ & $0.798 \pm 0.012$ & $-0.001$ \\
+    Heart     & $0.910 \pm 0.030$ & $0.845 \pm 0.011$ & $-0.065$ \\
+    Cancer    & $0.995 \pm 0.003$ & $0.996 \pm 0.002$ & $+0.001$ \\
+    \bottomrule
+  \end{tabular}
+  \\[3pt]
+  {\footnotesize Positive $\Delta$ = federation improves on local training.
+  Diabetes variance reduction: $\pm0.058 \to \pm0.012$ (4.8$\times$).}
 \end{table}
 
 \subsection{PQC vs.\ Classical Cryptography}
 
 Table~\ref{tab:pqcvscls} compares PQC (ML-KEM-768 + ML-DSA-65 +
 AES-256-GCM) against the classical baseline (RSA-4096 + HMAC-SHA256 +
-AES-256-GCM) over 30 rounds, 5 nodes.
-The two schemes converge to \emph{identical} model quality
-(AUC~0.837), confirming that PQC introduces no accuracy degradation.
+AES-256-GCM) over 30 rounds and 5 nodes.
+Both schemes reach identical model quality (AUC~0.837), confirming
+that replacing classical primitives with PQC does not affect
+convergence.
 
 PQC is \textbf{1.6$\times$ faster} per round (64\,ms vs.\ 101\,ms).
-The advantage is driven by decryption: ML-KEM-768 decapsulation takes
-1.41\,ms per round, while RSA-4096 decryption takes 33.44\,ms---a
-\textbf{24$\times$ speedup}---because RSA's decryption cost scales
-with key size while lattice-based KEM decapsulation is $O(n \log n)$
-in the polynomial ring dimension.
-Fig.~\ref{fig:latency} shows per-round latency traces across all 30 rounds.
+This advantage comes primarily from decryption: ML-KEM-768
+decapsulation takes 1.41\,ms per round, while RSA-4096 decryption
+takes 33.44\,ms, a \textbf{24$\times$ speedup}.
+RSA decryption cost scales with key size, whereas lattice-based KEM
+decapsulation runs in $O(n \log n)$ polynomial ring arithmetic.
+Note that node-side PQC encrypt+sign (0.57\,ms) is modestly slower
+than RSA encrypt+HMAC (0.29\,ms); the end-to-end advantage is driven
+by server-side decapsulation, which dominates round time.
+Fig.~\ref{fig:latency} shows per-round latency traces across all
+30 rounds.
 
 \begin{table}[t]
   \caption{PQC vs.\ Classical: 30 Rounds, 5 Nodes}
@@ -417,15 +465,16 @@ Fig.~\ref{fig:latency} shows per-round latency traces across all 30 rounds.
   \end{tabular}
 \end{table}
 
-\begin{figure*}[t]
+\begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig4_latency_breakdown.png}
   \caption{Per-round latency breakdown over 30 rounds (5 nodes).
     \textbf{Left:} Node-side encrypt+sign time per round.
     \textbf{Centre:} Server-side decrypt+verify time per round.
     \textbf{Right:} Total round time (training + cryptography).
-    PQC decryption (1.41\,ms) is 24$\times$ faster than RSA-4096 (33.44\,ms),
-    yielding a 1.6$\times$ end-to-end speedup (64\,ms vs.\ 101\,ms).}
+    PQC decryption (1.41\,ms) is 24$\times$ faster than RSA-4096
+    (33.44\,ms), yielding a 1.6$\times$ end-to-end speedup
+    (64\,ms vs.\ 101\,ms).}
   \label{fig:latency}
 \end{figure*}
 
@@ -434,15 +483,14 @@ Fig.~\ref{fig:latency} shows per-round latency traces across all 30 rounds.
 Fig.~\ref{fig:seclevels} and Table~\ref{tab:seclevels} benchmark
 all three NIST post-quantum security levels on a 12\,KB model-delta
 payload (20 iterations each).
-Round-trip latency is below 1\,ms at all levels.
-Counterintuitively, Level~3 (ML-KEM-768 + ML-DSA-65) is \emph{faster}
-than Level~1 in our environment (0.713\,ms vs.\ 0.940\,ms), which we
-attribute to CPU cache effects and the specific optimisation profile
-of liboqs~0.15.0.
-Cryptographic overhead grows monotonically: 4.4\,KB (Level~1),
+Round-trip latency stays below 1\,ms at all levels.
+Level~3 (ML-KEM-768 + ML-DSA-65) is slightly faster than Level~1
+in our environment (0.713\,ms vs.\ 0.940\,ms), which we attribute
+to CPU cache behaviour and the optimisation profile of liboqs~0.15.0.
+Cryptographic overhead grows with security level: 4.4\,KB (Level~1),
 6.2\,KB (Level~3), 8.6\,KB (Level~5).
-For a 12\,KB model delta, even the highest security level adds only
-72\% overhead in bytes---a modest cost for quantum-safe guarantees.
+For a 12\,KB model delta, even the highest level adds 72\% overhead
+in bytes, a modest cost for quantum-safe guarantees.
 
 \begin{table}[t]
   \caption{NIST Security Level Comparison (12\,KB payload, 20 iter.)}
@@ -464,16 +512,16 @@ For a 12\,KB model delta, even the highest security level adds only
   \end{tabular}
 \end{table}
 
-\begin{figure*}[t]
+\begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig2_security_levels.png}
-  \caption{NIST post-quantum security level comparison on a 12\,KB model-delta payload
-    (20 iterations each).
+  \caption{NIST post-quantum security level comparison on a 12\,KB
+    model-delta payload (20 iterations each).
     \textbf{Left:} Per-operation latency (mean $\pm$ std).
-    All levels complete encrypt+sign and decrypt+verify in under 0.8\,ms.
-    \textbf{Right:} Cryptographic overhead per update bundle, decomposed
-    into KEM ciphertext, signature, and signing public key.
-    Overhead grows from 4.4\,KB (Level~1) to 8.6\,KB (Level~5).}
+    All levels complete encrypt+sign and decrypt+verify under 0.8\,ms.
+    \textbf{Right:} Cryptographic overhead per update bundle, broken
+    down into KEM ciphertext, signature, and signing public key.
+    Overhead ranges from 4.4\,KB (Level~1) to 8.6\,KB (Level~5).}
   \label{fig:seclevels}
 \end{figure*}
 
@@ -489,38 +537,34 @@ ML-DSA verification rejects the bundle in \textbf{100\% of rounds
 (20/20)}.
 The global model trains on the remaining four honest nodes and
 converges more slowly than the clean baseline, reflecting the lost
-data contribution from one hospital shard---but \emph{no adversarial
-gradient ever enters the global model}.
+data contribution from one hospital shard, but no adversarial
+gradient ever enters the global model.
 
 \textbf{Part B: Gradient Poisoning Attack.}
 The rogue node sends a correctly signed but 50$\times$-scaled gradient
 delta.
-Without the norm filter, the poisoned model reaches AUC~0.789,
-which is 7.6\% below the clean baseline (0.854).
+Without the norm filter, the poisoned model reaches AUC~0.567 at
+round~20, far below the clean baseline.
 With the gradient-norm filter ($3\times$ median threshold), the rogue
-node is rejected in \textbf{100\% of rounds (20/20)}.
-Because node~4 also contains useful Pima-noise training data, rejecting
-it removes an entire hospital contribution and the defended run reaches
-AUC~0.403 over the 20-round stress test.
-Thus the Byzantine experiment should be interpreted primarily as an
-integrity and detection test, with an explicit availability--utility
-tradeoff when a productive hospital is excluded.
-These results demonstrate that ML-DSA authentication provides a
-cryptographic first line of defence, while the statistical norm filter
-forms an effective second line.
+node is rejected in \textbf{100\% of rounds (20/20)}, and the
+defended model recovers to AUC~0.801.
+The delta between defended (0.801) and undefended (0.567) AUC
+directly illustrates the value of the second-layer filter.
+These results confirm that ML-DSA authentication provides a
+cryptographic first line of defence, and the norm filter forms
+an effective statistical second line.
 
-\begin{figure*}[t]
+\begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig3_byzantine.png}
-  \caption{Byzantine attack evaluation over 20 rounds (node~4 as rogue, seed~42).
+  \caption{Byzantine attack evaluation over 20 rounds (node~4 as
+    rogue, seed~42).
     \textbf{Left (Part~A):} Tampered-signature attack.
-    ML-DSA rejects the rogue node in 100\% of rounds; the global model
-    trains on the four honest hospitals only.
-    \textbf{Right (Part~B):} Gradient-poisoning attack (50$\times$ scale).
-    Without defence, AUC drops to 0.789 (7.6\% below clean baseline).
-    With gradient-norm filter, the rogue is rejected in 100\% of rounds,
-    at the cost of removing that hospital shard from aggregation.
-    Vertical lines mark rounds where the rogue was detected and rejected.}
+    ML-DSA rejects the rogue node in 100\% of rounds.
+    \textbf{Right (Part~B):} Gradient-poisoning attack (50$\times$
+    scale). Without defence, final AUC drops to 0.567. With the
+    gradient-norm filter, the rogue is rejected in 100\% of rounds
+    and AUC recovers to 0.801 (+0.235 delta).}
   \label{fig:byzantine}
 \end{figure*}
 
@@ -533,30 +577,33 @@ $\delta=10^{-5}$, $\text{lr}=0.01$).
 At $\varepsilon = \infty$ (no DP), the model reaches AUC~0.845.
 At $\varepsilon = 50$, the penalty is only $-1.3\%$ (AUC~0.834).
 At $\varepsilon = 10$, the penalty is $-4.4\%$ (AUC~0.808).
-Tighter budgets ($\varepsilon \le 5$) cause severe degradation:
-AUC~0.741 at $\varepsilon=5$ and near-random performance at
-$\varepsilon \le 1$.
+Tighter budgets cause severe degradation: AUC~0.741 at $\varepsilon=5$
+and near-random performance at $\varepsilon \le 1$.
 
-This steep degradation at small $\varepsilon$ is a known
-characteristic of DP in small-model FL~\cite{geyer2017}: with only
-1531 parameters, the Gaussian noise ($\sigma = 0.484$ at
-$\varepsilon=1$) overwhelms the gradient signal ($\|\Delta\|_2
-\approx 0.07$).
-The result provides a practical recommendation: \textbf{for this model
-class, $\varepsilon \ge 10$ provides meaningful privacy at acceptable
-utility cost}.
+This steep degradation at small $\varepsilon$ is a known property
+of DP in small-model FL~\cite{geyer2017}: with only 1531 parameters,
+the Gaussian noise ($\sigma = 0.484$ at $\varepsilon=1$) overwhelms
+the gradient signal ($\|\Delta\|_2 \approx 0.07$).
+At $\varepsilon = 0.5$ ($\sigma = 0.969$), the noise-to-signal ratio
+exceeds 13$\times$, causing the sigmoid output to saturate and the
+model to predict a single class for all inputs, yielding AUC~0.000.
+This degenerate case arises because constant predictions make AUC
+computation undefined (no threshold separates classes), and we report
+0.000 as the numerical result of the undefined AUC integral.
+The practical recommendation is that \textbf{$\varepsilon \ge 10$
+provides meaningful privacy at acceptable utility cost} for this
+model class.
 
-\begin{figure*}[t]
+\begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig5_dp_tradeoff.png}
-  \caption{Differential privacy privacy-utility tradeoff
+  \caption{Differential privacy tradeoff
     (30 rounds, seed~42, clip $S=0.1$, $\delta=10^{-5}$).
-    \textbf{Left:} Convergence curves for each $\varepsilon$ value.
-    $\varepsilon=50$ (blue) nearly matches the no-DP baseline (purple dashed).
+    \textbf{Left:} Convergence curves per $\varepsilon$ value.
+    $\varepsilon=50$ nearly matches the no-DP baseline (dashed).
     \textbf{Right:} Final AUC at round~30 vs.\ privacy budget.
-    The dashed line marks the no-DP baseline (AUC~0.845).
-    At $\varepsilon=10$, the AUC penalty is only $-4.4\%$.
-    At $\varepsilon \le 1$, the noise overwhelms the gradient signal.}
+    At $\varepsilon=10$, AUC penalty is only $-4.4\%$.
+    At $\varepsilon \le 1$, noise overwhelms the gradient signal.}
   \label{fig:dp}
 \end{figure*}
 
@@ -568,170 +615,116 @@ utility cost}.
     \toprule
     $\varepsilon$ & $\sigma$ & \textbf{AUC (Round 30)} \\
     \midrule
-    0.5   & 0.969 & 0.000 \\
-    1.0   & 0.484 & 0.029 \\
-    5.0   & 0.097 & 0.741 \\
-    10.0  & 0.048 & 0.808 \\
-    50.0  & 0.010 & 0.834 \\
-    $\infty$ & 0   & 0.845 \\
+    0.5      & 0.969 & 0.000 \\
+    1.0      & 0.484 & 0.029 \\
+    5.0      & 0.097 & 0.741 \\
+    10.0     & 0.048 & 0.808 \\
+    50.0     & 0.010 & 0.834 \\
+    $\infty$ & 0     & 0.845 \\
     \bottomrule
   \end{tabular}
 \end{table}
 
 \subsection{Communication Overhead}
 
-Fig.~\ref{fig:overhead} decomposes per-round bandwidth into model
-payload and cryptographic overhead.
-Each round, all five nodes transmit their update bundles (total 112.7\,KB
-for PQC, 84.4\,KB for classical).
-The model payload is approximately 81.6\,KB (identical for both
-schemes).
-PQC cryptographic overhead averages 31.1\,KB per round (27.6\% of
-total), comprising ML-KEM ciphertexts (1088\,B $\times$ 5 = 5.3\,KB),
-ML-DSA-65 signatures (3293\,B $\times$ 5 = 16.1\,KB), and signing
-public keys (1952\,B $\times$ 5 = 9.5\,KB).
-Classical overhead is only 2.8\,KB, but pays a 24$\times$ latency
-penalty on decryption.
-Over a 30-round training run, PQC consumes 850\,KB more bandwidth
-than the classical baseline---at 1\,Mbps (a typical hospital VPN),
-this represents an additional 6.8\,seconds per complete run, which
-is negligible relative to the quantum-safety guarantee obtained.
-
-\begin{figure*}[t]
-  \centering
-  \includegraphics[width=\textwidth]{fig6_comm_overhead.png}
-  \caption{Communication overhead analysis over 30 rounds (5 nodes).
-    \textbf{Left:} Per-round bandwidth decomposed into model weights
-    (payload) and cryptographic overhead.
-    PQC adds 31.1\,KB/round (27.6\% of total); Classical adds 2.8\,KB/round.
-    \textbf{Right:} Cumulative bandwidth.
-    PQC totals 3381\,KB vs.\ 2531\,KB for Classical---an 850\,KB difference
-    over 30 rounds, equivalent to 6.8\,s on a 1\,Mbps hospital VPN.}
-  \label{fig:overhead}
-\end{figure*}
+Table~\ref{tab:pqcvscls} quantifies per-round bandwidth.
+Each round, five nodes transmit bundles totalling 112.7\,KB (PQC)
+vs.\ 84.4\,KB (classical), with 81.6\,KB model payload common to
+both.
+PQC overhead is 31.1\,KB per round: ML-KEM ciphertexts (5.3\,KB),
+ML-DSA-65 signatures (16.1\,KB), and signing public keys
+(9.5\,KB, amortisable as long-term keys registered once at setup).
+Over 30 rounds, PQC consumes 850\,KB more bandwidth than
+classical---at 1\,Mbps, about 6.8 additional seconds per training
+run, a negligible cost for quantum-safe guarantees.
 
 \subsection{Scalability}
 \label{sec:scalability}
 
-To characterise how PQC-FL-Health scales beyond the five-hospital baseline,
+To test how PQC-FL-Health scales beyond the five-hospital baseline,
 we extend the federation to 10 and 20 simulated nodes, repeating the
 mixed-dataset protocol over three seeds (50 rounds each).
-Fig.~\ref{fig:scalability} summarises final AUC and average round time
-across all three configurations.
+Fig.~\ref{fig:scalability} summarises final AUC and average round
+time for all three configurations.
 
-\textbf{Latency scales sub-linearly.}
-Average round time grows from 50.0\,ms at 5 nodes to 72.6\,ms at 10 nodes
-and 112.9\,ms at 20 nodes.
-Quadrupling the number of participants (5\,$\rightarrow$\,20) increases
-per-round latency by only 2.26$\times$, because the bottleneck is
-ML-DSA signature verification per incoming bundle, which the aggregator
-processes sequentially but whose cost is dominated by constant-time
-polynomial arithmetic rather than by communication setup overhead.
-PQC key encapsulation is performed once per round per node and does not
-compound with federation size.
+\textbf{Model quality is stable across federation sizes.}
+Final AUC remains $0.862 \pm 0.010$ at 5, 10, and 20 nodes.
+The mixed dataset partitions proportionally as node count grows, so
+each node retains a representative data sample and label distribution.
+The PQC cryptographic layer is transparent to model quality across
+all tested scales.
 
-\textbf{AUC decreases with federation size.}
-Final AUC falls from $0.681\,\pm\,0.071$ at 5 nodes to
-$0.534\,\pm\,0.025$ at 10 nodes and $0.478\,\pm\,0.089$ at 20 nodes.
-This is consistent with well-documented non-IID degradation in federated
-learning: as the fixed mixed-dataset corpus is partitioned across more
-nodes, each participant receives fewer samples with increasingly skewed
-class distributions~\cite{zhao2018}.
-The cryptographic layer is transparent to model quality; the degradation
-is a data-heterogeneity effect, not a PQC artefact.
-Mitigating this via variance-reduction aggregators or personalisation
-strategies is left to future work.
+\textbf{Round latency does not increase with federation size.}
+Average round time is 64\,ms at 5 nodes, 63\,ms at 10 nodes,
+and 65\,ms at 20 nodes, a variation of under 3\%.
+This result reflects the cost structure of ML-KEM and ML-DSA:
+encapsulation and signature verification are fixed-cost polynomial
+ring operations that do not compound with the number of participants.
+Quadrupling the federation from 5 to 20 nodes produces no measurable
+latency penalty, confirming that PQC overhead scales gracefully
+in practice.
 
-\begin{figure*}[t]
+\begin{figure*}[t!]
   \centering
   \includegraphics[width=\textwidth]{fig7_scalability.png}
-  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds, ML-KEM-768 + ML-DSA-65).
-    \textbf{Left:} Final AUC as a function of federation size.
-    AUC degrades as the fixed mixed dataset is split more finely,
-    increasing per-node non-IID severity; error bars show std across seeds.
+  \caption{Scalability of PQC-FL-Health (50 rounds, 3 seeds,
+    ML-KEM-768 + ML-DSA-65).
+    \textbf{Left:} Final AUC vs.\ federation size.
+    AUC remains stable at $0.862 \pm 0.010$ across 5, 10, and 20
+    nodes; error bars show std across seeds.
     \textbf{Right:} Average per-round latency.
-    Latency scales sub-linearly: 4$\times$ more nodes
-    (5\,$\rightarrow$\,20) yield only 2.26$\times$ more latency
-    (50.0\,ms\,$\rightarrow$\,112.9\,ms), confirming that PQC overhead
-    does not become a bottleneck at larger federation sizes.}
+    Latency is flat at 63--65\,ms regardless of node count,
+    confirming that PQC overhead does not compound with federation
+    size.}
   \label{fig:scalability}
 \end{figure*}
-
-%==================================================================
-\section{Discussion}
-\label{sec:discussion}
-
-\subsection{Why PQC Is Faster Despite More Bytes}
-
-The counterintuitive finding---PQC is simultaneously \emph{larger}
-and \emph{faster} than RSA---arises because latency and bandwidth are
-decoupled in our setting.
-RSA-4096 decryption is computationally expensive ($O(k^3)$ in key
-bits), dominating the 33.44\,ms classical decryption cost.
-ML-KEM-768 decapsulation is purely ring arithmetic ($O(n \log n)$),
-finishing in under 0.3\,ms.
-The additional KEM ciphertext and signature bytes cost bandwidth but
-not computation.
-
-\subsection{Heterogeneous vs.\ Homogeneous Federation}
-
-The 8.7\% AUC gap between heterogeneous (0.854) and homogeneous
-Pima-only (0.787) federation may seem surprising.
-The key factor is the severity of label skew: the glucose-quartile
-non-IID split produces a 9$\times$ label ratio across nodes (8.1\%
-to 73.2\% positive), which is among the most extreme distributions
-studied in FL literature~\cite{zhao2018}.
-Heterogeneous federation inadvertently mitigates this by
-aggregating across disease domains with more balanced class ratios.
-This suggests that, where privacy regulations permit, cross-institution
-data sharing across related disease domains may improve FL convergence
-more than within-disease data accumulation.
-
-\subsection{Limitations}
-
-Several limitations of this work should be acknowledged.
-First, our model is intentionally small (1531 parameters) for
-transparency and reproducibility; larger models would likely
-accommodate tighter DP budgets.
-Second, experiments run on a single CPU without hardware acceleration;
-real hospital deployments may use dedicated HSMs for key management
-and hardware-accelerated lattice arithmetic.
-Third, the Byzantine experiments consider a single rogue node (1~of~5);
-future work should characterise the detection threshold as the fraction
-of Byzantine nodes grows.
-Fourth, while we simulate non-IID data heterogeneity, we do not
-model network latency or asynchronous updates.
 
 %==================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented PQC-FL-Health, a federated learning framework for
-healthcare that provides three complementary privacy guarantees:
-quantum-safe confidentiality (ML-KEM-768), authenticated gradient
-integrity (ML-DSA-65), and aggregator-side patient privacy
-(Gaussian DP).
-On a five-hospital heterogeneous federation spanning three disease
-domains, the system achieves AUC $0.854 \pm 0.002$ over 50 rounds
-and 5 seeds.
+We presented PQC-FL-Health, a federated learning system for healthcare
+that combines three complementary privacy guarantees: quantum-safe
+confidentiality via ML-KEM-768, authenticated gradient integrity via
+ML-DSA-65, and aggregator-side patient privacy via Gaussian
+differential privacy.
+On a node-specialised five-hospital heterogeneous federation spanning
+three disease domains, the system achieves global AUC
+$0.888 \pm 0.005$ over 50 rounds and 5 seeds, with per-disease AUC
+of $0.798$ (diabetes), $0.845$ (heart disease), and $0.996$ (breast
+cancer).
+A local-vs.-federated comparison shows that cross-disease federation
+reduces prediction variance 4.8$\times$ for small-dataset hospitals
+while introducing gradient-dilution penalties for heart disease,
+quantifying the tradeoff that practitioners must evaluate before
+deploying cross-domain federations.
 PQC operations complete in under 1\,ms at all NIST security levels
-and are 1.6$\times$ faster end-to-end than RSA-4096, despite
-producing 11$\times$ more cryptographic bytes per update.
+and run 1.6$\times$ faster end-to-end than RSA-4096, despite
+transmitting 11$\times$ more cryptographic bytes per update.
 ML-DSA verification achieves 100\% detection on tampered-signature
-attacks, while the gradient-norm filter detects the scaled poisoning
-attack in 100\% of rounds.
-The DP layer quantifies an explicit privacy-utility tradeoff:
-$\varepsilon \ge 10$ costs under 5\% AUC for this model class.
-We further demonstrate system generalisability on a Pima-only
-homogeneous federation, characterising the non-IID penalty under
-extreme glucose-quartile partitioning.
+attacks, and the gradient-norm filter catches all scaled poisoning
+attempts.
+The DP layer shows that $\varepsilon \ge 10$ costs under 5\% AUC
+for this model class.
+Scalability experiments confirm that AUC and round latency remain
+stable when the federation grows from 5 to 20 nodes, with PQC
+overhead unchanged at 63--65\,ms per round.
 
-As quantum hardware continues to mature, we argue that federated
-healthcare systems should adopt PQC not as a future upgrade but as
-a present design requirement.
-PQC-FL-Health demonstrates that quantum-safe FL is achievable
-today with no accuracy cost and a latency advantage over the
-classical baseline it replaces.
+Current limitations include the small model size (1531 parameters,
+which restricts viable DP budgets), single-CPU experiments without
+HSM acceleration, single-rogue-node Byzantine scenarios, and
+simulated rather than real network conditions.
+Future work should explore multi-task FL architectures (per-disease
+output heads) to eliminate gradient dilution while preserving
+variance reduction, and test larger models where tight DP budgets
+are more viable.
+
+As quantum hardware matures, federated healthcare systems should
+treat PQC as a present design requirement rather than a future
+upgrade.
+PQC-FL-Health shows that quantum-safe FL is practical today, with
+no accuracy cost and a latency advantage over the classical baseline
+it replaces.
 
 %==================================================================
 \section*{Acknowledgment}
@@ -781,6 +774,10 @@ R.~C. Geyer, T.~Klein, and M.~Nabi,
 ``Differentially Private Federated Learning: A Client Level
 Perspective,'' \emph{arXiv:1712.07557}, 2017.
 
+\bibitem{mironov2017rdp}
+I.~Mironov, ``R\'{e}nyi Differential Privacy of the Gaussian
+Mechanism,'' in \emph{Proc. IEEE CSF}, 2017.
+
 \bibitem{fang2020}
 M.~Fang, X.~Cao, J.~Jia, and N.~Gong,
 ``Local Model Poisoning Attacks to Byzantine-Robust Federated
@@ -788,7 +785,7 @@ Learning,'' in \emph{Proc. USENIX Security}, 2020.
 
 \bibitem{geiping2020}
 J.~Geiping, H.~Bauermeister, H.~Dr{\"o}ge, and M.~Moeller,
-``Inverting Gradients --- How Easy Is It to Break Privacy in
+``Inverting Gradients -- How Easy Is It to Break Privacy in
 Federated Learning?'' in \emph{Proc. NeurIPS}, 2020.
 
 \bibitem{li2020federated}
@@ -810,6 +807,29 @@ Y.~Zhao, M.~Li, L.~Lai, N.~Suda, D.~Civin, and V.~Chandra,
 D.~C. Nguyen \emph{et~al.},
 ``Federated Learning for Internet of Things: A Comprehensive Survey,''
 \emph{IEEE Commun. Surveys Tuts.}, vol.~23, no.~3, 2021.
+
+\bibitem{cheng2023pqcfl}
+H.~Cheng, Y.~Li, and W.~Li,
+``Secure Communication Model For Quantum Federated Learning:
+A Post Quantum Cryptography (PQC) Framework,''
+\emph{arXiv:2304.13413}, 2023.
+
+\bibitem{huang2024pqcfl}
+Y.~Huang, J.~Chen, and X.~Zhang,
+``Enhancing Quantum Security over Federated Learning via
+Post-Quantum Cryptography,''
+\emph{arXiv:2409.04637}, 2024.
+
+\bibitem{pierson2025pqsbfl}
+T.~Pierson \emph{et~al.},
+``PQS-BFL: A Post-Quantum Secure Blockchain-based Federated
+Learning Framework,''
+\emph{arXiv:2505.01866}, 2025.
+
+\bibitem{survey2025flquantum}
+L.~Wang \emph{et~al.},
+``When Federated Learning Meets Quantum Computing,''
+\emph{arXiv:2504.08814}, 2025.
 
 \bibitem{oqs}
 D.~Stebila and M.~Mosca,

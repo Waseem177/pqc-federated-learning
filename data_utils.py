@@ -108,36 +108,91 @@ def _load_wdbc():
 def _partition_pima_noniid(X, y, n_nodes, test_ratio, rng):
     """
     Non-IID split of Pima dataset across n_nodes hospitals.
-    Simulates real-world skew: hospitals are sorted by patient glucose level
-    (feature index 1 in raw Pima), then divided into contiguous quantile bands.
-    Each hospital has a different glucose distribution → genuine non-IID.
+    Sorted by glucose level (feature 1) into contiguous quantile bands
+    → each hospital has a different glucose distribution (genuine non-IID).
     """
-    glucose = X[:, 1]
-    order   = np.argsort(glucose)
+    order = np.argsort(X[:, 1])
     X_sorted, y_sorted = X[order], y[order]
-
     shards = []
-    bands  = np.array_split(np.arange(len(X_sorted)), n_nodes)
-    for band in bands:
+    for band in np.array_split(np.arange(len(X_sorted)), n_nodes):
         Xi, yi = X_sorted[band], y_sorted[band]
-        Xtr, ytr, Xte, yte = _stratified_split(Xi, yi, test_ratio, rng)
-        shards.append((Xtr, ytr, Xte, yte))
+        shards.append(_stratified_split(Xi, yi, test_ratio, rng))
     return shards
 
 
-def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
-                       dataset="mixed"):
+def _load_hetero_shards(test_ratio, rng):
     """
-    dataset="mixed"  — heterogeneous: pooled PIMA + Cleveland + WDBC
-    dataset="pima"   — homogeneous: Pima diabetes only, non-IID by glucose quartile
+    Node-specialised heterogeneous federation (always 5 nodes):
+      Node 0: Pima diabetes shard A  (clean, ~256 samples)
+      Node 1: Pima diabetes shard B  (clean, ~256 samples)
+      Node 2: Cleveland heart disease (full 297 samples)
+      Node 3: WDBC breast cancer     (full 569 samples)
+      Node 4: Pima diabetes shard C  (Gaussian noise σ=0.1, lower-quality source)
+    All features zero-padded to 30 dimensions (WDBC size).
+    Returns (shards, dataset_labels).
+    """
+    X_pima, y_pima   = _load_pima()
+    X_heart, y_heart = _load_cleveland()
+    X_wdbc,  y_wdbc  = _load_wdbc()
+
+    X_pima  = _normalise(X_pima)
+    X_heart = _normalise(X_heart)
+    X_wdbc  = _normalise(X_wdbc)
+
+    max_dim = 30  # WDBC dimensionality
+
+    # Split Pima into 3 equal parts (for nodes 0, 1, 4)
+    idx = np.arange(len(X_pima))
+    rng.shuffle(idx)
+    pima_parts = np.array_split(idx, 3)
+
+    shards, labels = [], []
+
+    # Nodes 0, 1: clean Pima shards
+    for part in pima_parts[:2]:
+        Xi = _pad(X_pima[part], max_dim)
+        yi = y_pima[part]
+        shards.append(_stratified_split(Xi, yi, test_ratio, rng))
+        labels.append("diabetes")
+
+    # Node 2: Cleveland heart disease
+    shards.append(_stratified_split(_pad(X_heart, max_dim), y_heart, test_ratio, rng))
+    labels.append("heart")
+
+    # Node 3: WDBC breast cancer
+    shards.append(_stratified_split(X_wdbc, y_wdbc, test_ratio, rng))
+    labels.append("cancer")
+
+    # Node 4: noisy Pima shard (Gaussian noise simulates lower-quality data)
+    Xi = _pad(X_pima[pima_parts[2]], max_dim)
+    yi = y_pima[pima_parts[2]]
+    noise = rng.normal(0, 0.1, Xi.shape).astype(np.float32)
+    shards.append(_stratified_split(np.clip(Xi + noise, 0.0, 1.0), yi, test_ratio, rng))
+    labels.append("diabetes_noisy")
+
+    return shards, labels
+
+
+def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
+                       dataset="hetero"):
+    """
+    Returns (shards, dataset_labels).
+
+    dataset="hetero" — node-specialised 5-hospital federation (primary evaluation):
+                       nodes 0-1 diabetes, node 2 heart, node 3 cancer,
+                       node 4 noisy diabetes; n_nodes must be 5.
+    dataset="pima"   — Pima diabetes only, non-IID by glucose quartile (ablation).
+    dataset="mixed"  — pooled PIMA+Cleveland+WDBC, randomly distributed
+                       (used by scalability experiment for variable n_nodes).
     """
     rng = np.random.default_rng(seed)
 
-    # ── Pima-only (homogeneous, 5 diabetes clinics) ───────────────────────────
+    # ── Pima-only ablation ────────────────────────────────────────────────────
     if dataset == "pima":
         X, y = _load_pima()
-        X    = _normalise(X)
+        X = _normalise(X)
         shards = _partition_pima_noniid(X, y, n_nodes, test_ratio, rng)
+        labels = ["diabetes"] * n_nodes
         if verbose:
             print(f"  Dataset: Pima Indians Diabetes  "
                   f"(n={len(X)}, non-IID by glucose quartile)")
@@ -145,19 +200,32 @@ def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
                 print(f"  Node {i}: {len(Xtr):3d} train "
                       f"({ytr.mean()*100:.1f}% pos) | {len(Xte):3d} test")
             print(f"  Input dim: {X.shape[1]}")
-        return shards
+        return shards, labels
 
-    # ── Mixed (heterogeneous, multi-disease) ──────────────────────────────────
+    # ── Node-specialised heterogeneous federation ─────────────────────────────
+    if dataset == "hetero":
+        if n_nodes != 5:
+            raise ValueError("dataset='hetero' requires n_nodes=5")
+        shards, labels = _load_hetero_shards(test_ratio, rng)
+        if verbose:
+            node_names = ["Pima-A", "Pima-B", "Cleveland", "WDBC", "Pima-C (noisy)"]
+            print(f"  Dataset: node-specialised heterogeneous federation (5 hospitals)")
+            for i, (Xtr, ytr, Xte, yte) in enumerate(shards):
+                print(f"  Node {i} [{node_names[i]:16s}]: {len(Xtr):3d} train "
+                      f"({ytr.mean()*100:.1f}% pos) | {len(Xte):2d} test  "
+                      f"[{labels[i]}]")
+            print(f"  Input dim: 30 (Pima/Cleveland zero-padded to WDBC size)")
+        return shards, labels
+
+    # ── Mixed pool-and-distribute (scalability experiment, variable n_nodes) ──
     X_pima,  y_pima  = _load_pima()
     X_heart, y_heart = _load_cleveland()
     X_wdbc,  y_wdbc  = _load_wdbc()
 
-    # normalise each hospital independently — simulates local calibration
     X_pima  = _normalise(X_pima)
     X_heart = _normalise(X_heart)
     X_wdbc  = _normalise(X_wdbc)
 
-    # zero-pad all to WDBC dimensionality (largest at 30 features)
     max_dim = max(X_pima.shape[1], X_heart.shape[1], X_wdbc.shape[1])  # 30
     X_pima  = _pad(X_pima,  max_dim)
     X_heart = _pad(X_heart, max_dim)
@@ -166,6 +234,7 @@ def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
     X_all = np.concatenate([X_pima, X_heart, X_wdbc], axis=0)
     y_all = np.concatenate([y_pima, y_heart, y_wdbc], axis=0)
     shards = _stratified_shards(X_all, y_all, n_nodes, test_ratio, rng)
+    labels = ["mixed"] * n_nodes
 
     if verbose:
         print(f"  Dataset: pooled PIMA + Cleveland + WDBC "
@@ -177,8 +246,9 @@ def load_and_partition(n_nodes=5, test_ratio=0.2, seed=42, verbose=True,
         print(f"  Datasets: PIMA n={len(X_pima)}, "
               f"Cleveland n={len(X_heart)}, WDBC n={len(X_wdbc)}")
 
-    return shards
+    return shards, labels
 
 
 if __name__ == "__main__":
-    shards = load_and_partition(n_nodes=5)
+    shards, labels = load_and_partition(n_nodes=5)
+    print(labels)
